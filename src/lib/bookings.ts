@@ -54,7 +54,7 @@ const isConflict = (e: unknown) => {
 export const newReference = () => `ON-${new Date().toISOString().slice(2, 7).replace("-", "")}-${randomToken(4).replace(/[^A-Za-z0-9]/g, "X").slice(0, 5).toUpperCase()}`;
 
 async function managementRecipients(tx: Tx | typeof db = db) {
-  const rows = await tx.select({ id: s.users.id, roles: sql<string[]>`array_agg(${s.userRoles.role})`, permissions: s.users.permissions, status: s.users.status })
+  const rows = await tx.select({ id: s.users.id, roles: sql<string[]>`array_agg(${s.userRoles.role})::text[]`, permissions: s.users.permissions, status: s.users.status })
     .from(s.users).innerJoin(s.userRoles, eq(s.userRoles.userId, s.users.id))
     .where(and(eq(s.users.status, "active"), inArray(s.userRoles.role, ["ops", "manager", "admin"]))).groupBy(s.users.id);
   return rows.filter((r) => can({ ...r, roles: r.roles as never }, "bookings.manage")).map((r) => r.id);

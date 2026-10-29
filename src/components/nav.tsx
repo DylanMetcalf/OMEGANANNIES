@@ -15,7 +15,7 @@ export function NavLinks({ nav, onNavigate }: { nav: NavItem[]; onNavigate?: () 
       {nav.map((n, i) => {
         const on = active(path, n.href, i === 0);
         return (
-          <Link key={n.href} href={n.href} onClick={onNavigate} aria-current={on ? "page" : undefined}
+          <Link key={n.href} href={n.href} prefetch={false} onClick={onNavigate} aria-current={on ? "page" : undefined}
             className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-[14px] transition-colors ${on ? "bg-navy text-white" : "text-ink hover:bg-cream"}`}>
             {n.label}
             {!!n.badge && <span className={`rounded-full px-2 text-[11px] font-semibold ${on ? "bg-gold text-navy" : "bg-gold-50 text-gold-600"}`}>{n.badge}</span>}

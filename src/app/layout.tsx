@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import "./globals.css";
+import { Hydrated } from "@/components/hydrated";
 
 const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-cormorant", display: "swap" });
 const dmsans = DM_Sans({ subsets: ["latin"], variable: "--font-dmsans", display: "swap" });
@@ -16,7 +17,7 @@ export const viewport: Viewport = { themeColor: "#1a2340", width: "device-width"
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-ZA" className={`${cormorant.variable} ${dmsans.variable}`}>
-      <body>{children}</body>
+      <body>{children}<Hydrated /></body>
     </html>
   );
 }

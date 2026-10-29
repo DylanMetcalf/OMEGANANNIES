@@ -13,7 +13,7 @@ export const metadata = { title: "Administration" };
 export default async function Admin({ searchParams }: { searchParams: Promise<{ entity?: string }> }) {
   const u = await requireUser({ role: "management" });
   const entity = (await searchParams).entity;
-  const staff = can(u, "users.manage") ? await db.select({ u: s.users, roles: sql<string[]>`array_agg(${s.userRoles.role})` }).from(s.users).innerJoin(s.userRoles, eq(s.userRoles.userId, s.users.id)).where(inArray(s.userRoles.role, ["ops", "manager", "admin"])).groupBy(s.users.id).orderBy(s.users.name) : [];
+  const staff = can(u, "users.manage") ? await db.select({ u: s.users, roles: sql<string[]>`array_agg(${s.userRoles.role})::text[]` }).from(s.users).innerJoin(s.userRoles, eq(s.userRoles.userId, s.users.id)).where(inArray(s.userRoles.role, ["ops", "manager", "admin"])).groupBy(s.users.id).orderBy(s.users.name) : [];
   const auditRows = can(u, "audit.view") ? await db.select({ a: s.auditEvents, who: s.users.name }).from(s.auditEvents).leftJoin(s.users, eq(s.users.id, s.auditEvents.actorId)).where(entity ? eq(s.auditEvents.entity, entity) : undefined).orderBy(desc(s.auditEvents.createdAt)).limit(60) : [];
   const integrations = await db.select().from(s.integrationConfigs);
   const [ret] = await db.select().from(s.settings).where(eq(s.settings.key, "retention"));
