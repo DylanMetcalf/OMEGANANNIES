@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* Omega Nannies design tokens — derived from omeganannies.com (navy / gold / cream / sand, Cormorant Garamond + DM Sans) */
+@theme {
+  --color-navy: #1a2340;
+  --color-navy-700: #2a3558;
+  --color-navy-50: #eef0f6;
+  --color-gold: #c8922a;
+  --color-gold-600: #a87717; /* AA on white for text */
+  --color-gold-50: #faf3e6;
+  --color-cream: #f7f3ee;
+  --color-sand: #ede5d8;
+  --color-line: #e4dccf;
+  --color-ink: #2c3347;
+  --color-muted: #5d6472; /* darker than site #6b7280 for 4.5:1 on cream */
+  --color-ok: #2f7a55;
+  --color-ok-50: #e8f4ee;
+  --color-warn: #9a6200;
+  --color-warn-50: #fdf3e1;
+  --color-bad: #b4372f;
+  --color-bad-50: #fbeceb;
+  --color-info: #2f5d8a;
+  --color-info-50: #e9f0f7;
+  --font-display: var(--font-cormorant), Georgia, serif;
+  --font-sans: var(--font-dmsans), ui-sans-serif, system-ui, sans-serif;
+  --radius-card: 14px;
+  --shadow-soft: 0 1px 2px rgb(26 35 64 / 0.04), 0 4px 16px rgb(26 35 64 / 0.05);
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-cream text-ink font-sans antialiased; font-size: 15px; line-height: 1.55; }
+  h1, h2, h3 { @apply font-display text-navy; font-weight: 600; letter-spacing: 0.005em; }
+  :focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: var(--color-gold-50); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+}
+
+@utility card {
+  @apply bg-white rounded-[var(--radius-card)] border border-line shadow-[var(--shadow-soft)];
+}
+@utility eyebrow {
+  @apply text-[11px] uppercase tracking-[0.18em] text-gold-600 font-medium;
+}
+@utility label {
+  @apply block text-[13px] font-medium text-ink mb-1.5;
+}
+@utility input {
+  @apply w-full rounded-lg border border-line bg-white px-3 py-2.5 text-[15px] text-ink placeholder:text-muted/70 transition-colors focus:border-navy focus:outline-none focus:ring-2 focus:ring-gold/30 disabled:bg-cream disabled:text-muted;
+  &[aria-invalid="true"] { @apply border-bad; }
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[14px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-h-[42px];
+}
+@utility btn-primary {
+  @apply btn bg-navy text-white hover:bg-navy-700;
+}
+@utility btn-gold {
+  @apply btn bg-gold text-navy hover:bg-[#d6a03a];
+}
+@utility btn-secondary {
+  @apply btn bg-white text-navy border border-line hover:border-navy/40;
+}
+@utility btn-ghost {
+  @apply btn text-navy hover:bg-sand/60;
+}
+@utility btn-danger {
+  @apply btn bg-white text-bad border border-bad/30 hover:bg-bad-50;
+}
+@utility btn-sm {
+  @apply px-3! py-1.5! min-h-[34px]! text-[13px]!;
+}
+@utility tbl {
+  @apply w-full text-left text-[14px];
+  & th { @apply text-[12px] font-medium uppercase tracking-wider text-muted px-4 py-2.5 border-b border-line bg-cream/60; }
+  & td { @apply px-4 py-3 border-b border-line/70 align-top; }
+  & tr:last-child td { @apply border-b-0; }
+}
+@utility link {
+  @apply text-navy underline decoration-gold/60 underline-offset-4 hover:decoration-gold;
+}
