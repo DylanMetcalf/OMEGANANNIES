@@ -4,7 +4,7 @@ import { ActionForm, Submit } from "@/components/action-form";
 import { Empty, PageHeader, Section } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { familyIdsOf } from "@/lib/bookings";
-import { ageFrom } from "@/lib/time";
+import { ageLabel } from "@/lib/time";
 import { deleteChildAction, saveChildAction } from "../actions";
 
 export const metadata = { title: "Children" };
@@ -37,7 +37,7 @@ export default async function Children() {
       <div className="space-y-6">
         {kids.length === 0 && <Empty title="Add your children">This lets us match the right nanny for their ages and needs.</Empty>}
         {kids.map((c) => (
-          <Section key={c.id} title={`${c.preferredName}${ageFrom(c.dateOfBirth) !== null ? ` · ${ageFrom(c.dateOfBirth)} yrs` : ""}`} action={<ActionForm action={deleteChildAction} confirm={`Remove ${c.preferredName}?`}><input type="hidden" name="id" value={c.id} /><Submit className="btn-ghost btn-sm" pendingText="Removing…">Remove</Submit></ActionForm>}>
+          <Section key={c.id} title={`${c.preferredName} · ${ageLabel(c.dateOfBirth)}`} action={<ActionForm action={deleteChildAction} confirm={`Remove ${c.preferredName}?`}><input type="hidden" name="id" value={c.id} /><Submit className="btn-ghost btn-sm" pendingText="Removing…">Remove</Submit></ActionForm>}>
             <ChildForm c={c} />
           </Section>
         ))}

@@ -57,3 +57,10 @@ export function ageFrom(dob: string | null, at = new Date()): number | null {
 export function ageGroup(age: number): string {
   return age < 1 ? "newborn" : age < 3 ? "toddler" : age < 6 ? "preschool" : age < 13 ? "school" : "teen";
 }
+/** Human age: months for babies, years otherwise. */
+export function ageLabel(dob: string | null, at = new Date()): string {
+  if (!dob) return "age not given";
+  const d = new Date(dob + "T00:00:00Z");
+  const months = (at.getUTCFullYear() - d.getUTCFullYear()) * 12 + at.getUTCMonth() - d.getUTCMonth() - (at.getUTCDate() < d.getUTCDate() ? 1 : 0);
+  return months < 24 ? `${Math.max(0, months)} months` : `${Math.floor(months / 12)} yrs`;
+}

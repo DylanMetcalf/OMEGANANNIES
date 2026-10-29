@@ -7,7 +7,7 @@ import { Notice, PageHeader, Section, StatusBadge } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { bookingAccess } from "@/lib/bookings";
 import { bookingDetail } from "@/lib/queries";
-import { ageFrom, fmtDateTime } from "@/lib/time";
+import { ageLabel, fmtDateTime } from "@/lib/time";
 import { bookingStatusAction, checkInNoteAction, startShareAction, stopShareAction } from "../../actions";
 
 export const metadata = { title: "Booking" };
@@ -33,7 +33,7 @@ export default async function NannyBooking({ params }: { params: Promise<{ id: s
             <Section title="Children & care instructions">
               <div className="space-y-5">{d.children.map((c) => (
                 <div key={c.id} className="rounded-xl border border-line p-4">
-                  <p className="font-display text-[22px] text-navy">{c.preferredName}{ageFrom(c.dateOfBirth) !== null && <span className="ml-2 font-sans text-[14px] text-muted">{ageFrom(c.dateOfBirth)} yrs</span>}</p>
+                  <p className="font-display text-[22px] text-navy">{c.preferredName}<span className="ml-2 font-sans text-[14px] text-muted">{ageLabel(c.dateOfBirth)}</span></p>
                   {c.allergies && <p className="mt-2 rounded-lg bg-bad-50 px-3 py-2 text-[14px] text-bad"><strong>Allergies:</strong> {c.allergies}</p>}
                   <dl className="mt-3 grid gap-2 text-[14px] sm:grid-cols-2">
                     {([["Dietary", c.dietaryNeeds], ["Routines", c.routines], ["Interests", c.interests], ["Care requirements", c.careRequirements], ["Additional needs", c.additionalNeeds], ["Emergency", c.emergencyInstructions]] as const).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt className="text-[12px] uppercase tracking-wider text-muted">{k}</dt><dd>{v}</dd></div>)}
@@ -45,7 +45,7 @@ export default async function NannyBooking({ params }: { params: Promise<{ id: s
             </Section>
           )}
         </div>
-        <div className="space-y-6">
+        <div className="order-first space-y-6 lg:order-none">
           {(b.status === "confirmed" || b.status === "in_progress") && (
             <Section title="Your day">
               {b.status === "confirmed" && onDates && <ActionForm action={bookingStatusAction}><input type="hidden" name="bookingId" value={b.id} /><input type="hidden" name="to" value="in_progress" /><Submit className="btn-gold w-full">Check in &amp; start</Submit></ActionForm>}

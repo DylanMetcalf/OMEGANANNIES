@@ -9,7 +9,7 @@ import { audit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/money";
 import { can } from "@/lib/permissions";
-import { ageFrom, fmtDateTime } from "@/lib/time";
+import { ageLabel, fmtDateTime } from "@/lib/time";
 import { familyAdminAction, userStatusAction } from "../../actions";
 
 export const metadata = { title: "Family record" };
@@ -33,7 +33,7 @@ export default async function FamilyRecord({ params }: { params: Promise<{ id: s
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
           <Section title="Household"><DefList items={[["Type", f.audience], ["Country", f.countryOfResidence], ["Language", f.preferredLanguage], ["Contact via", f.preferredChannel], ["Billing", `${f.billingName ?? ""} ${f.billingEmail ?? ""}`], ["Emergency", `${f.emergencyContactName ?? ""} ${f.emergencyContactPhone ?? ""}`], ["Preferences", f.bookingPreferences]]} /></Section>
-          <Section title="Children">{kids.length ? <ul className="grid gap-3 sm:grid-cols-2">{kids.map((c) => <li key={c.id} className="rounded-xl border border-line p-3 text-[14px]"><p className="font-medium text-navy">{c.preferredName} · {ageFrom(c.dateOfBirth) ?? "?"} yrs</p>{sensitive ? <>{c.allergies && <p className="text-bad">Allergies: {c.allergies}</p>}{c.dietaryNeeds && <p>Diet: {c.dietaryNeeds}</p>}{c.additionalNeeds && <p>Needs: {c.additionalNeeds}</p>}</> : <p className="text-muted">Sensitive details hidden.</p>}</li>)}</ul> : <p className="text-[14px] text-muted">No children recorded.</p>}</Section>
+          <Section title="Children">{kids.length ? <ul className="grid gap-3 sm:grid-cols-2">{kids.map((c) => <li key={c.id} className="rounded-xl border border-line p-3 text-[14px]"><p className="font-medium text-navy">{c.preferredName} · {ageLabel(c.dateOfBirth)}</p>{sensitive ? <>{c.allergies && <p className="text-bad">Allergies: {c.allergies}</p>}{c.dietaryNeeds && <p>Diet: {c.dietaryNeeds}</p>}{c.additionalNeeds && <p>Needs: {c.additionalNeeds}</p>}</> : <p className="text-muted">Sensitive details hidden.</p>}</li>)}</ul> : <p className="text-[14px] text-muted">No children recorded.</p>}</Section>
           <Section title="Bookings">{bookings.length ? <ul className="divide-y divide-line">{bookings.map((b) => <li key={b.id} className="flex justify-between py-2 text-[14px]"><Link className="link" href={`/manage/bookings/${b.id}`}>{b.reference} · {dates(b)}</Link><StatusBadge status={b.status} /></li>)}</ul> : <p className="text-[14px] text-muted">No bookings.</p>}</Section>
           <Section title="Invoices">{invoices.length ? <ul className="space-y-1 text-[14px]">{invoices.map((i) => <li key={i.id} className="flex justify-between"><span className="font-mono text-[13px]">{i.number}</span><span>{formatMoney(i.amountMinor)} · <span className={i.status === "paid" ? "text-ok" : "text-warn"}>{i.status}</span></span></li>)}</ul> : <p className="text-[14px] text-muted">None.</p>}</Section>
         </div>

@@ -11,7 +11,7 @@ import { priceBooking } from "@/lib/bookings";
 import { formatMoney } from "@/lib/money";
 import { can } from "@/lib/permissions";
 import { bookingDetail } from "@/lib/queries";
-import { ageFrom, fmtDateTime, minutesToHHMM } from "@/lib/time";
+import { ageLabel, fmtDateTime, minutesToHHMM } from "@/lib/time";
 import type { Reason } from "@/lib/matching";
 import type { QuoteLine } from "@/lib/pricing";
 import * as A from "../../actions";
@@ -61,7 +61,7 @@ export default async function Workspace({ params }: { params: Promise<{ id: stri
           </Section>
           {d.children.length > 0 && (
             <Section title="Children" action={!sensitive ? <Badge>Medical details hidden</Badge> : null}>
-              <ul className="grid gap-3 sm:grid-cols-2">{d.children.map((c) => <li key={c.id} className="rounded-xl border border-line p-3 text-[14px]"><p className="font-medium text-navy">{c.preferredName} · {ageFrom(c.dateOfBirth) ?? "?"} yrs</p>{sensitive ? <>{c.allergies && <p className="text-bad">Allergies: {c.allergies}</p>}{c.additionalNeeds && <p>Needs: {c.additionalNeeds}</p>}{c.routines && <p className="text-muted">{c.routines}</p>}</> : <p className="text-muted">Requires sensitive-data permission.</p>}</li>)}</ul>
+              <ul className="grid gap-3 sm:grid-cols-2">{d.children.map((c) => <li key={c.id} className="rounded-xl border border-line p-3 text-[14px]"><p className="font-medium text-navy">{c.preferredName} · {ageLabel(c.dateOfBirth)}</p>{sensitive ? <>{c.allergies && <p className="text-bad">Allergies: {c.allergies}</p>}{c.additionalNeeds && <p>Needs: {c.additionalNeeds}</p>}{c.routines && <p className="text-muted">{c.routines}</p>}</> : <p className="text-muted">Requires sensitive-data permission.</p>}</li>)}</ul>
             </Section>
           )}
           <Section title="Matching" action={manage && editable ? <ActionForm action={A.runMatchingAction}>{hidden}<Submit className="btn-secondary btn-sm" pendingText="Matching…">{matches.length ? "Re-run" : "Run matching"}</Submit></ActionForm> : null}>

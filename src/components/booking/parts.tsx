@@ -15,6 +15,8 @@ export function Journey({ status }: { status: BookingStatus }) {
   const idx = JOURNEY.indexOf(map[status] ?? status);
   if (idx < 0) return <StatusBadge status={status} />;
   return (
+    <div>
+    <p className="mb-2 text-[13px] font-medium text-navy sm:hidden">Step {idx + 1} of {JOURNEY.length}: {STATUS_LABEL[status]}</p>
     <ol className="grid grid-cols-7 gap-1" aria-label="Booking progress">
       {JOURNEY.map((st, i) => (
         <li key={st} className="flex flex-col gap-1.5" aria-current={i === idx ? "step" : undefined}>
@@ -23,6 +25,7 @@ export function Journey({ status }: { status: BookingStatus }) {
         </li>
       ))}
     </ol>
+    </div>
   );
 }
 
