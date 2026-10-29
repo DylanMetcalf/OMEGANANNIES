@@ -24,6 +24,9 @@ npm run test:e2e                                      # 7 Playwright journeys ag
 ```
 Latest results: typecheck clean, lint clean, **29/29** unit and integration tests, **7/7** E2E (desktop + mobile).
 
+## Screenshots
+Real screenshots of the demo environment are in [docs/screenshots](docs/screenshots).
+
 ## Documentation
 [Audit](docs/AUDIT.md) · [Architecture](docs/ARCHITECTURE.md) · [Security & privacy](docs/SECURITY.md) · [Deployment & readiness matrix](docs/DEPLOYMENT.md) · [Reporting definitions](docs/REPORTING.md) · [Self-audit](docs/SELF-AUDIT.md) · [Implementation log](docs/IMPLEMENTATION_LOG.md)
 
