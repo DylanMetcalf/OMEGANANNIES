@@ -55,22 +55,10 @@ export function MobileNav({ nav, portal, user }: { nav: NavItem[]; portal: strin
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => setOpen(false), [path]);
   useEffect(() => { const d = ref.current; if (!d) return; if (open && !d.open) d.showModal(); if (!open && d.open) d.close(); }, [open]);
-  const primary = nav.slice(0, 4);
+  useEffect(() => { const h = () => setOpen(true); window.addEventListener("omega:menu", h); return () => window.removeEventListener("omega:menu", h); }, []);
   return (
     <>
       <button className="btn-ghost btn-sm" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}><Menu aria-hidden className="h-5 w-5" /><span className="sr-only sm:not-sr-only">Menu</span></button>
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-        {primary.map((n) => {
-          const on = isActive(path, n.href);
-          return (
-            <Link key={n.href} href={n.href} prefetch={false} aria-current={on ? "page" : undefined} className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${on ? "text-navy" : "text-muted"}`}>
-              <Icon name={n.icon} className="h-5 w-5" />{n.label.split(" ")[0]}
-              {!!n.badge && <span className="absolute right-[28%] top-2 h-2 w-2 rounded-full bg-gold" aria-label={`${n.badge} unread`} />}
-            </Link>
-          );
-        })}
-        <button onClick={() => setOpen(true)} className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted"><Menu aria-hidden className="h-5 w-5" />More</button>
-      </nav>
       <dialog ref={ref} onClose={() => setOpen(false)} aria-label="Navigation" className="m-0 ml-auto h-full max-h-none w-[86%] max-w-[340px] bg-surface p-0 shadow-[var(--shadow-pop)] open:animate-in">
         <div className="flex h-full flex-col pb-6">
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -82,5 +70,28 @@ export function MobileNav({ nav, portal, user }: { nav: NavItem[]; portal: strin
         </div>
       </dialog>
     </>
+  );
+}
+
+/**
+ * Phone tab bar for the four primary destinations plus "More". Rendered outside the sticky header: a
+ * backdrop-filter on an ancestor would otherwise become the containing block for this fixed element.
+ */
+export function BottomTabs({ nav }: { nav: NavItem[] }) {
+  const path = usePathname();
+  const primary = nav.slice(0, 4);
+  return (
+    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+        {primary.map((n) => {
+          const on = isActive(path, n.href);
+          return (
+            <Link key={n.href} href={n.href} prefetch={false} aria-current={on ? "page" : undefined} className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${on ? "text-navy" : "text-muted"}`}>
+              <Icon name={n.icon} className="h-5 w-5" />{n.label.split(" ")[0]}
+              {!!n.badge && <span className="absolute right-[28%] top-2 h-2 w-2 rounded-full bg-gold" aria-label={`${n.badge} unread`} />}
+            </Link>
+          );
+        })}
+        <button onClick={() => window.dispatchEvent(new Event("omega:menu"))} aria-haspopup="dialog" className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted"><Menu aria-hidden className="h-5 w-5" />More</button>
+      </nav>
   );
 }

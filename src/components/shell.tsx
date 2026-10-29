@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Bell, LogOut } from "lucide-react";
-import { MobileNav, NavLinks } from "./nav";
+import { BottomTabs, MobileNav, NavLinks } from "./nav";
 import { Avatar } from "./ui";
 import { signOutAction } from "@/app/(auth)/actions";
 import { env } from "@/lib/env";
@@ -41,6 +41,7 @@ export function PortalShell({ portal, nav, user, children, unread = 0 }: { porta
         </header>
         {env.demo && <div role="note" className="border-b border-gold/25 bg-gold-50 px-4 py-1.5 text-center text-[12px] font-medium text-gold-600">Demonstration environment — synthetic data only. No real payments or emails are sent.</div>}
         <main id="main" className="mx-auto max-w-[1200px] animate-in px-4 py-7 sm:px-8 sm:py-9">{children}</main>
+        <BottomTabs nav={nav} />
       </div>
     </div>
   );

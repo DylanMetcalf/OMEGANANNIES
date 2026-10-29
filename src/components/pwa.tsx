@@ -13,8 +13,11 @@ export function PwaRegister() {
         sw?.addEventListener("statechange", () => { if (sw.state === "installed" && navigator.serviceWorker.controller) setWaiting(sw); });
       });
     }).catch(() => {});
+    // Reload only when an existing worker is replaced after the user chose "Reload" — not on first install,
+    // where clients.claim() also fires controllerchange and a reload would discard what the user is typing.
+    const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
   }, []);
   if (!waiting) return null;
   return (

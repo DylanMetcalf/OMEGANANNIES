@@ -8,14 +8,18 @@ import { STATUSES, STATUS_LABEL, type BookingStatus } from "@/lib/booking-state"
 import { services } from "@/lib/queries";
 
 export const metadata = { title: "Bookings" };
-export default async function ManageBookings({ searchParams }: { searchParams: Promise<{ status?: string; service?: string; q?: string }> }) {
+export default async function ManageBookings({ searchParams }: { searchParams: Promise<{ status?: string; service?: string; q?: string; page?: string }> }) {
   await requireUser({ perm: "bookings.view" });
   const sp = await searchParams;
+  const PAGE = 50;
+  const page = Math.max(1, Math.min(1000, Number(sp.page) || 1));
   const conds: SQL[] = [];
   if (sp.status && (STATUSES as readonly string[]).includes(sp.status)) conds.push(eq(s.bookings.status, sp.status as BookingStatus));
   if (sp.service) conds.push(eq(s.bookings.serviceCode, sp.service));
   if (sp.q) conds.push(or(ilike(s.bookings.reference, `%${sp.q}%`), ilike(s.families.displayName, `%${sp.q}%`), ilike(s.bookings.enquiryName, `%${sp.q}%`), ilike(s.nannies.displayName, `%${sp.q}%`))!);
-  const rows = await db.select({ b: s.bookings, nanny: s.nannies.displayName, family: s.families.displayName }).from(s.bookings).leftJoin(s.nannies, eq(s.nannies.id, s.bookings.nannyId)).leftJoin(s.families, eq(s.families.id, s.bookings.familyId)).where(conds.length ? and(...conds) : undefined).orderBy(desc(s.bookings.createdAt)).limit(200);
+  const rows = await db.select({ b: s.bookings, nanny: s.nannies.displayName, family: s.families.displayName }).from(s.bookings).leftJoin(s.nannies, eq(s.nannies.id, s.bookings.nannyId)).leftJoin(s.families, eq(s.families.id, s.bookings.familyId)).where(conds.length ? and(...conds) : undefined).orderBy(desc(s.bookings.createdAt)).limit(PAGE + 1).offset((page - 1) * PAGE);
+  const hasNext = rows.length > PAGE; if (hasNext) rows.pop();
+  const qs = (p: number) => `?${new URLSearchParams({ ...(sp.status ? { status: sp.status } : {}), ...(sp.service ? { service: sp.service } : {}), ...(sp.q ? { q: sp.q } : {}), page: String(p) })}`;
   const svc = await services();
   const sv = Object.fromEntries(svc.map((x) => [x.code, x.name]));
   return (
@@ -42,6 +46,7 @@ export default async function ManageBookings({ searchParams }: { searchParams: P
           </table>
         </div>
       ) : <Empty title="No bookings match" />}
+      {(page > 1 || hasNext) && <nav aria-label="Pagination" className="mt-4 flex items-center justify-between text-[14px]">{page > 1 ? <Link className="btn-secondary btn-sm" href={qs(page - 1)}>Previous</Link> : <span />}<span className="text-muted">Page {page}</span>{hasNext ? <Link className="btn-secondary btn-sm" href={qs(page + 1)}>Next</Link> : <span />}</nav>}
     </>
   );
 }

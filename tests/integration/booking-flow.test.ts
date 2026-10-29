@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { db, schema as s } from "@/db";
-import { acceptQuotation, assignNanny, bookingAccess, ConflictError, createBookingRequest, createQuotation, DomainError, runMatching, sendQuotation, transition } from "@/lib/bookings";
+import { acceptQuotation, assignNanny, bookingAccess, ConflictError, createBookingRequest, createQuotation, DomainError, respondToOffer, runMatching, sendQuotation, transition } from "@/lib/bookings";
 import { notify } from "@/lib/notify";
 import { applyPaymentEvent, startPayment } from "@/lib/payments/service";
 import { PRICE_ITEMS_V1, SERVICES } from "@/db/seed/reference";
@@ -38,6 +38,7 @@ const request = (u: CurrentUser, familyId: string, childId: string, start: numbe
 async function toAwaitingApproval(bookingId: string, nanny: string) {
   await runMatching(manager, bookingId);
   await assignNanny(manager, bookingId, nanny);
+  await respondToOffer(nanny === nannyId ? nannyU : otherNannyU, bookingId, true);
   const q = await createQuotation(manager, bookingId, { adjustmentMinor: 0, adjustmentReason: null, travelTrips: 0, validDays: 7 });
   await sendQuotation(manager, q.id);
   return q;

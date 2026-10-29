@@ -3,6 +3,7 @@ import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
 import { Hydrated } from "@/components/hydrated";
 import { PwaRegister } from "@/components/pwa";
+import { Toaster } from "@/components/toaster";
 
 // next/font downloads these at build time and serves them from our own origin (no runtime Google requests).
 const manrope = Manrope({ subsets: ["latin"], weight: ["500", "600", "700", "800"], variable: "--font-manrope", display: "swap" });
@@ -20,7 +21,7 @@ export const viewport: Viewport = { themeColor: "#172038", width: "device-width"
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-ZA" className={`${manrope.variable} ${inter.variable}`}>
-      <body>{children}<Hydrated /><PwaRegister /></body>
+      <body>{children}<Hydrated /><PwaRegister /><Toaster /></body>
     </html>
   );
 }
