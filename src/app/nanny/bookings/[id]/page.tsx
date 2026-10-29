@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { bookingAccess } from "@/lib/bookings";
 import { bookingDetail } from "@/lib/queries";
 import { ageLabel, fmtDateTime } from "@/lib/time";
-import { bookingStatusAction, checkInNoteAction, startShareAction, stopShareAction } from "../../actions";
+import { bookingStatusAction, checkInNoteAction, respondOfferAction, startShareAction, stopShareAction } from "../../actions";
 
 export const metadata = { title: "Booking" };
 export default async function NannyBooking({ params }: { params: Promise<{ id: string }> }) {
@@ -24,6 +24,16 @@ export default async function NannyBooking({ params }: { params: Promise<{ id: s
   return (
     <>
       <PageHeader eyebrow={`Booking ${b.reference}`} title={d.serviceName} description={<StatusBadge status={b.status} />} actions={d.conversation && acc.sensitive ? <Link href={`/messages/${d.conversation.id}`} className="btn-secondary">Message family</Link> : null} />
+      {b.nannyResponse === "pending" && (
+        <section className="card mb-6 border-gold/40 p-5">
+          <h2 className="text-[16px]">Omega is offering you this booking</h2>
+          <p className="mt-1 text-[14px] text-muted">Check the dates, hours and area below. The family’s address and children’s care notes are shared once the booking is confirmed.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <ActionForm action={respondOfferAction}><input type="hidden" name="bookingId" value={b.id} /><Submit name="response" value="accept" className="btn-primary">Accept offer</Submit></ActionForm>
+            <ActionForm action={respondOfferAction} confirm="Decline this offer?" className="flex gap-2"><input type="hidden" name="bookingId" value={b.id} /><input name="note" placeholder="Reason (optional)" aria-label="Reason" className="input !w-56" /><Submit name="response" value="decline" className="btn-secondary">Decline</Submit></ActionForm>
+          </div>
+        </section>
+      )}
       {!acc.sensitive && <div className="mb-6"><Notice tone="info">This booking isn&rsquo;t confirmed yet. Address, contact details and children&rsquo;s care notes appear once it&rsquo;s confirmed.</Notice></div>}
       <div className="card mb-6 p-5"><Journey status={b.status} /></div>
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">

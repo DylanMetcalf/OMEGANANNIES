@@ -5,11 +5,12 @@ import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { audit } from "@/lib/audit";
 import { assertUser } from "@/lib/auth";
-import { DomainError, nannyOf, transition } from "@/lib/bookings";
+import { DomainError, nannyOf, respondToOffer, transition } from "@/lib/bookings";
 import { list, opt, run, str } from "@/lib/forms";
 import { deliverPending } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
-import { MAX_UPLOAD_BYTES, putObject, sniffMime } from "@/lib/storage";
+import { storeDocumentUpload, storeImageUpload } from "@/lib/uploads";
+import { provenanceEntry, submitForReview } from "@/lib/onboarding";
 import { hhmmToMinutes, zonedToUtc } from "@/lib/time";
 import type { ActionResult } from "@/components/action-form";
 
@@ -97,7 +98,9 @@ export async function saveProfileAction(_: ActionResult, fd: FormData): Promise<
     await db.transaction(async (tx) => {
       const patch: Record<string, unknown> = {};
       for (const f of SELF) if (!same(cur[f], next[f])) { patch[f] = next[f]; applied++; await tx.insert(s.profileChangeRequests).values({ nannyId: n.id, field: f, oldValue: cur[f] as object, newValue: next[f] as object, status: "applied", autoApplied: true, requestedBy: u.id }); }
-      if (applied) await tx.update(s.nannies).set({ ...patch, updatedAt: new Date() }).where(eq(s.nannies.id, n.id));
+      const prov = { ...(n.provenance as Record<string, unknown>) };
+      for (const k of Object.keys(patch)) prov[k] = provenanceEntry("nanny", u.id);
+      if (applied) await tx.update(s.nannies).set({ ...patch, provenance: prov, updatedAt: new Date() }).where(eq(s.nannies.id, n.id));
       for (const f of REVIEWED) if (!same(cur[f], next[f])) {
         pending++;
         await tx.update(s.profileChangeRequests).set({ status: "superseded" }).where(and(eq(s.profileChangeRequests.nannyId, n.id), eq(s.profileChangeRequests.field, f), eq(s.profileChangeRequests.status, "pending")));
@@ -152,18 +155,62 @@ export async function uploadDocumentAction(_: ActionResult, fd: FormData): Promi
   return run(async () => {
     const { u, n } = await me();
     if (!(await rateLimit(`upload:${u.id}`, 10, 3600))) throw new DomainError("Upload limit reached. Try again later.");
-    const file = fd.get("file");
-    if (!(file instanceof File) || file.size === 0) throw new DomainError("Choose a file.");
-    if (file.size > MAX_UPLOAD_BYTES) throw new DomainError("Files must be 10 MB or smaller.");
-    const buf = Buffer.from(await file.arrayBuffer());
-    const mime = sniffMime(buf);
-    if (!mime) throw new DomainError("Upload a PDF, JPG, PNG or WebP file.");
     const docType = z.enum(["id_document", "police_clearance", "first_aid", "reference", "qualification", "other"]).parse(str(fd, "docType"));
-    const { key, sha256 } = await putObject(buf, mime);
-    const [d] = await db.insert(s.documents).values({ ownerNannyId: n.id, docType, fileName: file.name.slice(0, 120), mimeType: mime, sizeBytes: file.size, storageKey: key, sha256, expiresOn: opt(fd, "expiresOn"), uploadedBy: u.id }).returning();
-    await audit(u.id, "document.upload", "document", d.id, { docType });
+    const expiresOn = opt(fd, "expiresOn");
+    if (expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) throw new DomainError("Enter a valid expiry date.");
+    const f = await storeDocumentUpload(fd.get("file"));
+    const [d] = await db.insert(s.documents).values({ ownerNannyId: n.id, docType, fileName: f.fileName, mimeType: f.mime, sizeBytes: f.size, storageKey: f.key, sha256: f.sha256, scanStatus: f.scan, expiresOn, uploadedBy: u.id }).returning();
+    await audit(u.id, "document.upload", "document", d.id, { docType, scan: f.scan });
+    revalidatePath("/nanny/documents"); revalidatePath("/nanny/onboarding");
+    return { ok: "Uploaded. Omega will review it — uploading doesn’t count as verification until it’s approved." };
+  });
+}
+/** Nannies may withdraw a document only while it is still awaiting review; reviewed documents are retained. */
+export async function withdrawDocumentAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const { u, n } = await me();
+    const r = await db.delete(s.documents).where(and(eq(s.documents.id, str(fd, "documentId")), eq(s.documents.ownerNannyId, n.id), eq(s.documents.status, "pending_review"))).returning();
+    if (!r.length) throw new DomainError("Only documents awaiting review can be withdrawn.");
+    await audit(u.id, "document.withdraw", "document", r[0].id);
     revalidatePath("/nanny/documents");
-    return { ok: "Uploaded. Omega will review it shortly." };
+    return { ok: "Document withdrawn." };
+  });
+}
+export async function photoChangeAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const { u, n } = await me();
+    if (!(await rateLimit(`photo:${u.id}`, 5, 3600))) throw new DomainError("Upload limit reached. Try again later.");
+    const { key } = await storeImageUpload(fd.get("file"));
+    if (!n.photoKey && n.status !== "approved") {
+      // First photo during onboarding applies straight away; Omega still reviews the profile before approval.
+      await db.update(s.nannies).set({ photoKey: key, photoUrl: `/api/photos/${n.id}`, provenance: { ...(n.provenance as object), photo: provenanceEntry("nanny", u.id) } }).where(eq(s.nannies.id, n.id));
+    } else {
+      await db.update(s.profileChangeRequests).set({ status: "superseded" }).where(and(eq(s.profileChangeRequests.nannyId, n.id), eq(s.profileChangeRequests.field, "photoKey"), eq(s.profileChangeRequests.status, "pending")));
+      await db.insert(s.profileChangeRequests).values({ nannyId: n.id, field: "photoKey", oldValue: n.photoKey, newValue: key, requestedBy: u.id });
+    }
+    await audit(u.id, "nanny.photo_upload", "nanny", n.id);
+    revalidatePath("/nanny/profile"); revalidatePath("/nanny/onboarding");
+    return { ok: n.photoKey || n.status === "approved" ? "Photo sent to Omega for approval." : "Photo added." };
+  });
+}
+export async function confirmDetailsAction(_: ActionResult, _fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const { u, n } = await me();
+    const p = { ...(n.provenance as Record<string, Record<string, unknown>>) };
+    for (const k of Object.keys(p)) p[k] = { ...p[k], confirmedByNanny: true, confirmedAt: new Date().toISOString() };
+    await db.update(s.nannies).set({ provenance: p }).where(eq(s.nannies.id, n.id));
+    await audit(u.id, "nanny.details_confirmed", "nanny", n.id);
+    revalidatePath("/nanny/onboarding");
+    return { ok: "Thank you — you’ve confirmed your prepared details." };
+  });
+}
+export async function submitProfileAction(_: ActionResult, _fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const { u, n } = await me();
+    await submitForReview(u, n);
+    void deliverPending();
+    revalidatePath("/nanny", "layout");
+    return { ok: "Submitted. Omega will review your profile and documents and let you know." };
   });
 }
 
@@ -173,5 +220,16 @@ export async function respondToReviewAction(_: ActionResult, fd: FormData): Prom
     const r = await db.update(s.reviews).set({ nannyResponse: z.string().min(2).max(600).parse(str(fd, "response")) }).where(and(eq(s.reviews.id, str(fd, "reviewId")), eq(s.reviews.nannyId, n.id), isNull(s.reviews.nannyResponse))).returning();
     if (!r.length) throw new DomainError("Review not found or already answered.");
     return { ok: "Response saved." };
+  });
+}
+
+export async function respondOfferAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const u = await assertUser({ role: "nanny" });
+    const accept = str(fd, "response") === "accept";
+    await respondToOffer(u, str(fd, "bookingId"), accept, opt(fd, "note")?.slice(0, 500));
+    void deliverPending();
+    revalidatePath("/nanny", "layout");
+    return { ok: accept ? "Thank you — Omega has been told you accept. You’ll be notified when the family confirms." : "Declined. Omega will offer the booking to someone else." };
   });
 }

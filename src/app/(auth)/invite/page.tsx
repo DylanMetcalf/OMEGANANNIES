@@ -9,11 +9,11 @@ export const metadata = { title: "Accept invitation" };
 export default async function Invite({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token = "" } = await searchParams;
   const [t] = token ? await db.select().from(s.authTokens).where(and(eq(s.authTokens.tokenHash, sha256(token)), eq(s.authTokens.kind, "invite"), isNull(s.authTokens.usedAt), gt(s.authTokens.expiresAt, new Date()))) : [];
-  if (!t) return <><h1 className="text-[36px]">Invitation unavailable</h1><div className="mt-6"><Notice tone="bad">This invitation is invalid, already used or expired. Please ask Omega Nannies for a new one.</Notice></div></>;
+  if (!t) return <><h1 className="text-[28px]">Invitation unavailable</h1><div className="mt-6"><Notice tone="bad">This invitation is invalid, already used or expired. Please ask Omega Nannies for a new one.</Notice></div></>;
   return (
     <>
       <p className="eyebrow">You&rsquo;re invited</p>
-      <h1 className="mt-2 text-[36px]">Join Omega Nannies</h1>
+      <h1 className="mt-2 text-[28px]">Join Omega Nannies</h1>
       <p className="mt-2 text-muted">Setting up <strong>{t.email}</strong> as {t.role === "nanny" ? "an Omega nanny" : `team member (${t.role})`}.</p>
       <ActionForm action={acceptInviteAction} className="mt-8 space-y-4">
         <input type="hidden" name="token" value={token} />

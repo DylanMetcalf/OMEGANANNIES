@@ -22,6 +22,10 @@ const TEMPLATES: Record<string, { category: Category; subject: (v: Vars) => stri
   document_expiring: { category: "reminders", subject: (v) => `${v.doc} expires ${v.when}`, body: (v) => `Your ${v.doc} expires on ${v.when}. Please upload a renewed copy so you stay bookable.` },
   document_reviewed: { category: "account", subject: (v) => `Document ${v.status}`, body: (v) => `Your ${v.doc} was ${v.status}. ${v.note ?? ""}` },
   profile_change_decided: { category: "account", subject: (v) => `Profile change ${v.status}`, body: (v) => `Your requested change to "${v.field}" was ${v.status}.` },
+  booking_offer: { category: "bookings", subject: (v) => `New booking offer ${v.ref}`, body: (v) => `Omega would like to offer you ${v.ref} (${v.service}, ${v.dates}, ${v.area}). Please accept or decline in your portal.` },
+  nanny_response: { category: "bookings", subject: (v) => `${v.nanny} ${v.response} ${v.ref}`, body: (v) => `${v.nanny} has ${v.response} the offer for ${v.ref}. ${v.note ?? ""}` },
+  email_changed: { category: "account", subject: () => "Your sign-in email was changed", body: (v) => `The email address for your Omega Nannies account was changed to ${v.masked}. If this wasn't you, contact Omega Nannies immediately.` },
+  password_changed: { category: "account", subject: () => "Your password was changed", body: () => "Your Omega Nannies password was changed and other devices were signed out. If this wasn't you, reset your password and contact us." },
   support_update: { category: "account", subject: (v) => `Support request: ${v.subject}`, body: (v) => `Your support request has been updated: ${v.status}.` },
 };
 
@@ -73,4 +77,19 @@ export async function deliverPending(limit = 25) {
     }
   }
   return pending.length;
+}
+
+/**
+ * Send an operational email to an address that may not have an account yet (e.g. a nanny invitation or email-change
+ * confirmation). Returns the real delivery outcome; in demo mode or without a provider the email is captured, not sent.
+ */
+export async function sendEmailDirect(to: string, subject: string, body: string, link?: string): Promise<"sent" | "captured" | "failed"> {
+  if (env.demo || !env.resendKey) return "captured";
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST", headers: { Authorization: `Bearer ${env.resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: env.emailFrom, to: [to], subject, html: emailHtml(subject, body, link) }), signal: AbortSignal.timeout(10000),
+    });
+    return r.ok ? "sent" : "failed";
+  } catch { return "failed"; }
 }

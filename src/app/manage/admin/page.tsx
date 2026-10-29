@@ -7,7 +7,8 @@ import { env } from "@/lib/env";
 import { can, PERMISSIONS } from "@/lib/permissions";
 import { paymentProvider } from "@/lib/payments/service";
 import { fmtDateTime } from "@/lib/time";
-import { confirmMfaAction, inviteStaffAction, retentionAction, staffAccessAction, startMfaAction } from "../actions";
+import { confirmMfaAction, inviteStaffAction, platformSettingsAction, retentionAction, staffAccessAction, startMfaAction } from "../actions";
+import { getSetting } from "@/lib/settings";
 
 export const metadata = { title: "Administration" };
 export default async function Admin({ searchParams }: { searchParams: Promise<{ entity?: string }> }) {
@@ -20,6 +21,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
   const rv = (ret?.value ?? { messagesMonths: 24, closedAccountMonths: 12, financialYears: 5 }) as Record<string, number>;
   const [emailStats] = (await db.execute<{ pending: number; failed: number; sent: number; captured: number }>(sql`SELECT count(*) FILTER (WHERE status='pending')::int pending, count(*) FILTER (WHERE status='failed')::int failed, count(*) FILTER (WHERE status='sent')::int sent, count(*) FILTER (WHERE status='captured')::int captured FROM notifications WHERE channel='email'`)).rows;
   const [me] = await db.select().from(s.users).where(eq(s.users.id, u.id));
+  const [reveal, requireAccept] = await Promise.all([getSetting("addressReveal"), getSetting("requireNannyAcceptance")]);
   const integ = [
     ["Payments (PayFast)", paymentProvider() === "payfast" ? (env.payfast.sandbox ? "Configured — sandbox" : "Configured — live") : env.demo ? "Demo provider (no real payments)" : "Not configured — needs merchant ID, key & passphrase", paymentProvider() === "payfast"],
     ["Email (Resend)", env.resendKey ? (env.demo ? "Key present — demo mode captures emails" : "Configured") : "Not configured — emails captured in outbox", !!env.resendKey && !env.demo],
@@ -57,6 +59,16 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
                 </ActionForm>
               </details>
             ))}</div>
+          </Section>
+        )}
+        {can(u, "settings.manage") && (
+          <Section title="Booking & privacy rules" description="Defaults until Omega confirms its policies.">
+            <ActionForm action={platformSettingsAction} className="space-y-4">
+              <div><label className="label" htmlFor="addressReveal">Share the family’s address and children’s care notes with the nanny from</label>
+                <select id="addressReveal" name="addressReveal" defaultValue={reveal} className="input"><option value="confirmed">Booking confirmed (paid)</option><option value="in_progress">Care has started (nanny checked in)</option></select></div>
+              <label className="flex items-start gap-2.5 text-[14px]"><input type="checkbox" name="requireNannyAcceptance" defaultChecked={requireAccept} className="mt-0.5 h-4 w-4 accent-navy" /><span>Require the nanny to accept an offer before a quotation can be sent</span></label>
+              <Submit className="btn-secondary">Save rules</Submit>
+            </ActionForm>
           </Section>
         )}
         {can(u, "settings.manage") && (

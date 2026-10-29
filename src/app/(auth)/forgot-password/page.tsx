@@ -6,7 +6,7 @@ export const metadata = { title: "Reset password" };
 export default function Forgot() {
   return (
     <>
-      <h1 className="text-[36px]">Reset your password</h1>
+      <h1 className="text-[28px]">Reset your password</h1>
       <p className="mt-2 text-muted">Enter your email and we&rsquo;ll send a secure link, valid for one hour.</p>
       <ActionForm action={forgotPasswordAction} className="mt-8 space-y-4">
         <div><label className="label" htmlFor="email">Email</label><input id="email" name="email" type="email" required className="input" /></div>

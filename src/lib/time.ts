@@ -29,9 +29,14 @@ export function hhmmToMinutes(s: string): number {
 /** Duration of a daily window in minutes; end <= start means it runs past midnight. */
 export const windowMinutes = (start: number, end: number) => (end > start ? end - start : end + 1440 - start);
 
+/** Care dates for a booking: every day in range, or only the chosen weekdays (0=Sun…6=Sat) for recurring patterns. */
+export function careDates(b: { startDate: string; endDate: string; weekdays?: number[] | null; liveIn?: boolean }): string[] {
+  const all = eachDate(b.startDate, b.endDate);
+  return !b.liveIn && b.weekdays?.length ? all.filter((d) => b.weekdays!.includes(weekday(d))) : all;
+}
 export type Session = { date: string; startsAt: Date; endsAt: Date };
-export function buildSessions(b: { startDate: string; endDate: string; dailyStartMinute: number; dailyEndMinute: number; timeZone: string; liveIn?: boolean }): Session[] {
-  const dates = eachDate(b.startDate, b.endDate);
+export function buildSessions(b: { startDate: string; endDate: string; dailyStartMinute: number; dailyEndMinute: number; timeZone: string; liveIn?: boolean; weekdays?: number[] | null }): Session[] {
+  const dates = careDates(b);
   if (b.liveIn) {
     // Live-in: one continuous block from first day start to last day end.
     const startsAt = zonedToUtc(b.startDate, b.dailyStartMinute, b.timeZone);

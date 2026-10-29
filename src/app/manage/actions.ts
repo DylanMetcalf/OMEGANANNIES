@@ -17,6 +17,11 @@ import { PERMISSIONS, type Role } from "@/lib/permissions";
 import { recordManualPayment, requestRefund } from "@/lib/payments/service";
 import { hhmmToMinutes } from "@/lib/time";
 import { issueToken } from "@/lib/tokens";
+import { createNannyProfile, issueInvitation, onboardingContext, provenanceEntry, REQUIRED_DOCS, revokeInvitation, SAFEGUARDING, setContact, verifyFields } from "@/lib/onboarding";
+import { importWebsiteNannies, parseCsv } from "@/lib/website-import";
+import { rateLimit } from "@/lib/rate-limit";
+import { storeImageUpload } from "@/lib/uploads";
+import { setSetting } from "@/lib/settings";
 import type { ActionResult } from "@/components/action-form";
 
 const done = (path: string, ok: string): ActionResult => { revalidatePath(path); void deliverPending(); return { ok }; };
@@ -118,98 +123,188 @@ export async function convertEnquiryAction(_: ActionResult, fd: FormData) {
   });
 }
 
-// ---------------- Nannies & vetting ----------------
+// ---------------- Nannies, onboarding & vetting ----------------
+const nannyPath = (id: string) => `/manage/nannies/${id}`;
 const slugify = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 export async function createNannyAction(_: ActionResult, fd: FormData) {
   let id = "";
   const r = await run(async () => {
     const u = await assertUser({ perm: "nannies.manage" });
-    const name = z.string().min(2).max(80).parse(str(fd, "displayName"));
-    const email = z.string().email("Enter the nanny's email to invite them.").parse(str(fd, "email").toLowerCase());
-    const [n] = await db.insert(s.nannies).values({ displayName: name, slug: `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`, status: "invited", isDemo: env.demo }).returning();
-    const token = await issueToken("invite", 24 * 7, { email, role: "nanny", subjectId: n.id, createdBy: u.id });
-    await audit(u.id, "nanny.create_invite", "nanny", n.id, { email });
-    id = n.id;
-    return { ok: env.demo ? `/invite?token=${token}` : "Invited" };
+    id = (await createNannyProfile(u, { displayName: str(fd, "displayName"), contactEmail: opt(fd, "email"), contactPhone: opt(fd, "phone"), headline: opt(fd, "headline") })).id;
+    return { ok: "Created" };
   });
-  if (id) redirect(`/manage/nannies/${id}${r?.ok?.startsWith("/invite") ? `?invite=${encodeURIComponent(r.ok)}` : ""}`);
+  if (id) redirect(nannyPath(id));
   return r;
 }
+const EDITABLE = ["displayName", "headline", "bio", "yearsExperience", "services", "languages", "ageGroups", "areas", "skills", "canDrive", "specialistExperience"] as const;
 export async function updateNannyAction(_: ActionResult, fd: FormData) {
   return run(async () => {
     const u = await assertUser({ perm: "nannies.manage" });
     const id = str(fd, "nannyId");
-    await db.update(s.nannies).set({
-      displayName: z.string().min(2).max(80).parse(str(fd, "displayName")), headline: opt(fd, "headline"), bio: opt(fd, "bio"), yearsExperience: z.coerce.number().int().min(0).max(60).parse(str(fd, "yearsExperience")),
-      services: list(fd, "services"), languages: list(fd, "languages"), ageGroups: list(fd, "ageGroups"), areas: list(fd, "areas"), skills: list(fd, "skills"), canDrive: bool(fd, "canDrive"),
-      specialistExperience: opt(fd, "specialistExperience"), photoUrl: opt(fd, "photoUrl"), internalNotes: opt(fd, "internalNotes"), updatedAt: new Date(),
-    }).where(eq(s.nannies.id, id));
+    const [n] = await db.select().from(s.nannies).where(eq(s.nannies.id, id));
+    if (!n) throw new DomainError("Nanny not found.");
+    const next: Record<string, unknown> = {
+      displayName: z.string().trim().min(2).max(80).parse(str(fd, "displayName")), headline: opt(fd, "headline")?.slice(0, 140) ?? null, bio: opt(fd, "bio")?.slice(0, 3000) ?? null,
+      yearsExperience: z.coerce.number().int().min(0).max(60).parse(str(fd, "yearsExperience")), services: list(fd, "services"), languages: list(fd, "languages"),
+      ageGroups: list(fd, "ageGroups"), areas: list(fd, "areas"), skills: list(fd, "skills"), canDrive: bool(fd, "canDrive"), specialistExperience: opt(fd, "specialistExperience")?.slice(0, 1000) ?? null,
+    };
+    const prov = { ...(n.provenance as Record<string, unknown>) };
+    for (const k of EDITABLE) if (JSON.stringify(next[k]) !== JSON.stringify((n as Record<string, unknown>)[k])) prov[k] = provenanceEntry("admin", u.id);
+    await db.update(s.nannies).set({ ...next, provenance: prov, internalNotes: opt(fd, "internalNotes"), updatedAt: new Date() }).where(eq(s.nannies.id, id));
     await audit(u.id, "nanny.update", "nanny", id);
-    return done(`/manage/nannies/${id}`, "Profile saved.");
+    return done(nannyPath(id), "Profile saved.");
+  });
+}
+export async function contactAction(_: ActionResult, fd: FormData) {
+  return run(async () => { const u = await assertUser({ perm: "nannies.manage" }); await setContact(u, str(fd, "nannyId"), opt(fd, "email"), opt(fd, "phone")); return done(nannyPath(str(fd, "nannyId")), "Contact details saved."); });
+}
+export async function inviteNannyAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "nannies.manage" });
+    const { link, delivery } = await issueInvitation(u, str(fd, "nannyId"));
+    revalidatePath(nannyPath(str(fd, "nannyId")));
+    if (delivery === "failed") return { error: "The invitation was created but the email could not be sent. Check email settings, then resend." };
+    return { ok: delivery === "captured" ? `Invitation created. Email delivery is not configured (demo), so share this one-time link securely: ${link}` : "Invitation emailed. It expires in 7 days." };
+  });
+}
+export async function bulkInviteAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "nannies.manage" });
+    const ids = list(fd, "ids").slice(0, 50);
+    if (!ids.length) throw new DomainError("Select at least one nanny.");
+    const results = { sent: 0, skipped: [] as string[] };
+    for (const id of ids) {
+      try { await issueInvitation(u, id); results.sent++; } catch (e) { results.skipped.push((e as Error).message); }
+    }
+    revalidatePath("/manage/nannies");
+    return { ok: `${results.sent} invitation(s) created.${results.skipped.length ? ` ${results.skipped.length} skipped (no email, already claimed, or limited).` : ""}` };
+  });
+}
+export async function revokeInviteAction(_: ActionResult, fd: FormData) {
+  return run(async () => { const u = await assertUser({ perm: "nannies.manage" }); const inv = await revokeInvitation(u, str(fd, "invitationId")); return done(nannyPath(inv.nannyId), "Invitation revoked — the link no longer works."); });
+}
+export async function importWebsiteAction(_: ActionResult, _fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "nannies.manage" });
+    if (!(await rateLimit("import:website", 6, 3600))) throw new DomainError("The website import has run several times recently. Try again later.");
+    const r = await importWebsiteNannies(u.id, { isDemo: env.demo });
+    revalidatePath("/manage/nannies");
+    return { ok: `Website import: ${r.found} found · ${r.created} new drafts · ${r.updated} updated · ${r.unchanged} unchanged · ${r.photos} photos · ${r.skippedFields} fields kept (edited or verified).${r.errors.length ? ` ${r.errors.length} errors.` : ""}` };
+  });
+}
+export async function csvImportAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "nannies.manage" });
+    const file = fd.get("file");
+    if (!(file instanceof File) || !file.size) throw new DomainError("Choose a CSV file.");
+    if (file.size > 512 * 1024) throw new DomainError("CSV files must be 512 KB or smaller.");
+    const rows = parseCsv(await file.text()).slice(0, 500);
+    if (!rows.length || !("name" in rows[0])) throw new DomainError("The CSV needs a header row with at least a “name” column.");
+    let created = 0; const errors: string[] = [];
+    const split = (x?: string) => (x ?? "").split(/[;|]/).map((v) => v.trim()).filter(Boolean);
+    for (const [i, row] of rows.entries()) {
+      try {
+        const n = await createNannyProfile(u, { displayName: row.name, contactEmail: row.email || null, contactPhone: row.phone || null, headline: row.headline || null });
+        const extra = { bio: row.bio || null, yearsExperience: Math.min(60, Number(row.years) || 0), languages: split(row.languages), areas: split(row.areas), services: split(row.services) };
+        const prov = { ...(n.provenance as Record<string, unknown>) };
+        for (const [k, v] of Object.entries(extra)) if (v && (!Array.isArray(v) || v.length)) prov[k] = provenanceEntry("csv", u.id);
+        await db.update(s.nannies).set({ ...extra, importSource: "csv", sourceRef: `csv:${n.id}`, importedAt: new Date(), provenance: prov }).where(eq(s.nannies.id, n.id));
+        created++;
+      } catch (e) { errors.push(`Row ${i + 2}: ${(e as Error).message}`); }
+    }
+    await audit(u.id, "import.csv", "nanny", null, { created, errors: errors.length });
+    revalidatePath("/manage/nannies");
+    return errors.length ? { error: `${created} created. ${errors.slice(0, 5).join(" ")}` } : { ok: `${created} draft profiles created.` };
+  });
+}
+export async function verifyFieldsAction(_: ActionResult, fd: FormData) {
+  return run(async () => { const u = await assertUser({ perm: "vetting.manage" }); await verifyFields(u, str(fd, "nannyId"), list(fd, "fields").filter((f) => (EDITABLE as readonly string[]).includes(f) || f === "photo")); return done(nannyPath(str(fd, "nannyId")), "Fields marked as verified by Omega."); });
+}
+export async function adminPhotoAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "nannies.manage" });
+    const id = str(fd, "nannyId");
+    const { key } = await storeImageUpload(fd.get("file"));
+    const [n] = await db.select().from(s.nannies).where(eq(s.nannies.id, id));
+    if (!n) throw new DomainError("Nanny not found.");
+    await db.update(s.nannies).set({ photoKey: key, photoUrl: `/api/photos/${id}`, provenance: { ...(n.provenance as object), photo: provenanceEntry("admin", u.id) }, updatedAt: new Date() }).where(eq(s.nannies.id, id));
+    await audit(u.id, "nanny.photo_update", "nanny", id);
+    return done(nannyPath(id), "Photo updated.");
   });
 }
 export async function nannyStatusAction(_: ActionResult, fd: FormData) {
   return run(async () => {
     const u = await assertUser({ perm: "nannies.manage" });
     const id = str(fd, "nannyId");
-    const status = z.enum(["approved", "suspended", "archived", "onboarding"]).parse(str(fd, "status"));
-    if (status === "approved") {
-      const checks = await db.select().from(s.verificationChecks).where(eq(s.verificationChecks.nannyId, id));
+    const action = z.enum(["approve", "publish", "unpublish", "suspend", "archive", "reopen"]).parse(str(fd, "status"));
+    const [n] = await db.select().from(s.nannies).where(eq(s.nannies.id, id));
+    if (!n) throw new DomainError("Nanny not found.");
+    if (action === "approve") {
+      if (!n.userId) throw new DomainError("The nanny must claim their account before approval.");
+      const ctx = await onboardingContext([id]);
       const today = new Date().toISOString().slice(0, 10);
-      const missing = (["interview", "reference", "identity", "police_clearance", "first_aid"] as const).filter((k) => !checks.some((c) => c.kind === k && c.status === "passed" && (!c.expiresOn || c.expiresOn >= today)));
+      const missing = SAFEGUARDING.filter((k) => !ctx.checks.some((c) => c.kind === k && c.status === "passed" && (!c.expiresOn || c.expiresOn >= today)));
       if (missing.length) throw new DomainError(`Cannot approve: ${missing.join(", ").replace(/_/g, " ")} not passed.`);
+      const approvedDocs = new Set(ctx.docs.filter((d) => d.status === "approved").map((d) => d.docType));
+      const missingDocs = REQUIRED_DOCS.filter((d) => !approvedDocs.has(d));
+      if (missingDocs.length) throw new DomainError(`Cannot approve: approve these documents first — ${missingDocs.join(", ").replace(/_/g, " ")}.`);
     }
-    await db.update(s.nannies).set({ status, published: status === "approved" ? bool(fd, "publish") : false, updatedAt: new Date() }).where(eq(s.nannies.id, id));
-    if (status === "suspended") { const [n] = await db.select().from(s.nannies).where(eq(s.nannies.id, id)); if (n.userId) await db.delete(s.sessions).where(eq(s.sessions.userId, n.userId)); }
-    await audit(u.id, `nanny.status_${status}`, "nanny", id, { reason: opt(fd, "reason") });
-    return done(`/manage/nannies/${id}`, `Nanny ${status}.`);
+    if (action === "publish" && n.status !== "approved") throw new DomainError("Only approved nannies can be published.");
+    const patch = { approve: { status: "approved" as const }, publish: { published: true }, unpublish: { published: false }, suspend: { status: "suspended" as const, published: false }, archive: { status: "archived" as const, published: false }, reopen: { status: "onboarding" as const, published: false } }[action];
+    await db.update(s.nannies).set({ ...patch, updatedAt: new Date() }).where(eq(s.nannies.id, id));
+    if (action === "suspend" && n.userId) await db.delete(s.sessions).where(eq(s.sessions.userId, n.userId));
+    await audit(u.id, `nanny.${action}`, "nanny", id, { reason: opt(fd, "reason") });
+    return done(nannyPath(id), { approve: "Approved.", publish: "Published to families.", unpublish: "Hidden from families.", suspend: "Suspended and signed out.", archive: "Archived.", reopen: "Returned to onboarding." }[action]);
   });
 }
 export async function recordCheckAction(_: ActionResult, fd: FormData) {
   return run(async () => {
     const u = await assertUser({ perm: "vetting.manage" });
-    const id = str(fd, "nannyId");
-    await db.insert(s.verificationChecks).values({ nannyId: id, kind: z.enum(["interview", "reference", "identity", "police_clearance", "first_aid"]).parse(str(fd, "kind")), status: z.enum(["pending", "passed", "failed"]).parse(str(fd, "status")), notes: opt(fd, "notes"), completedOn: opt(fd, "completedOn"), expiresOn: opt(fd, "expiresOn"), recordedBy: u.id });
-    await audit(u.id, "vetting.record_check", "nanny", id, { kind: str(fd, "kind"), status: str(fd, "status") });
-    return done(`/manage/nannies/${id}`, "Check recorded.");
+    const id = z.string().uuid().parse(str(fd, "nannyId"));
+    const [n] = await db.select({ id: s.nannies.id }).from(s.nannies).where(eq(s.nannies.id, id));
+    if (!n) throw new DomainError("Nanny not found.");
+    const status = z.enum(["pending", "passed", "failed"]).parse(str(fd, "status"));
+    if (status === "passed" && !opt(fd, "completedOn")) throw new DomainError("Enter the date the check was completed.");
+    await db.insert(s.verificationChecks).values({ nannyId: id, kind: z.enum(SAFEGUARDING).parse(str(fd, "kind")), status, notes: opt(fd, "notes"), completedOn: opt(fd, "completedOn"), expiresOn: opt(fd, "expiresOn"), recordedBy: u.id });
+    await audit(u.id, "vetting.record_check", "nanny", id, { kind: str(fd, "kind"), status });
+    return done(nannyPath(id), "Check recorded.");
   });
 }
 export async function reviewDocumentAction(_: ActionResult, fd: FormData) {
   return run(async () => {
     const u = await assertUser({ perm: "vetting.manage" });
     const status = z.enum(["approved", "rejected"]).parse(str(fd, "status"));
-    const [d] = await db.update(s.documents).set({ status, reviewNote: opt(fd, "note"), reviewedBy: u.id, reviewedAt: new Date(), expiresOn: opt(fd, "expiresOn") ?? undefined }).where(eq(s.documents.id, str(fd, "documentId"))).returning();
+    const [cur] = await db.select().from(s.documents).where(eq(s.documents.id, str(fd, "documentId")));
+    if (!cur) throw new DomainError("Document not found.");
+    if (cur.scanStatus === "infected") throw new DomainError("This file failed the malware scan and cannot be approved.");
+    const [d] = await db.update(s.documents).set({ status, reviewNote: opt(fd, "note"), reviewedBy: u.id, reviewedAt: new Date(), expiresOn: opt(fd, "expiresOn") ?? cur.expiresOn }).where(eq(s.documents.id, cur.id)).returning();
     await audit(u.id, `document.${status}`, "document", d.id);
     const [n] = d.ownerNannyId ? await db.select().from(s.nannies).where(eq(s.nannies.id, d.ownerNannyId)) : [];
-    if (n?.userId) await notify(n.userId, "document_reviewed", { doc: d.docType.replace("_", " "), status, note: d.reviewNote ?? "" }, `doc:${d.id}:${status}`, "/nanny/documents");
-    return done(`/manage/nannies/${d.ownerNannyId}`, `Document ${status}.`);
+    if (n?.userId) await notify(n.userId, "document_reviewed", { doc: d.docType.replace(/_/g, " "), status, note: d.reviewNote ?? "" }, `doc:${d.id}:${status}`, "/nanny/documents");
+    return done(d.ownerNannyId ? nannyPath(d.ownerNannyId) : "/manage/families", `Document ${status}.`);
   });
 }
+const CHANGE_FIELDS = ["services", "ageGroups", "areas", "canDrive", "specialistExperience", "yearsExperience", "photoKey"];
 export async function decideChangeAction(_: ActionResult, fd: FormData) {
   return run(async () => {
     const u = await assertUser({ perm: "nannies.manage" });
     const approve = str(fd, "decision") === "approve";
     const [c] = await db.select().from(s.profileChangeRequests).where(and(eq(s.profileChangeRequests.id, str(fd, "changeId")), eq(s.profileChangeRequests.status, "pending")));
     if (!c) throw new DomainError("Change already decided.");
-    const FIELDS = ["services", "ageGroups", "areas", "canDrive", "specialistExperience", "yearsExperience"];
-    if (!FIELDS.includes(c.field)) throw new DomainError("Unsupported field.");
+    if (!CHANGE_FIELDS.includes(c.field)) throw new DomainError("Unsupported field.");
     await db.transaction(async (tx) => {
-      if (approve) await tx.update(s.nannies).set({ [c.field]: c.newValue, updatedAt: new Date() }).where(eq(s.nannies.id, c.nannyId));
+      if (approve) {
+        const [n] = await tx.select().from(s.nannies).where(eq(s.nannies.id, c.nannyId));
+        const provKey = c.field === "photoKey" ? "photo" : c.field;
+        const extra = c.field === "photoKey" ? { photoUrl: `/api/photos/${c.nannyId}` } : {};
+        await tx.update(s.nannies).set({ [c.field]: c.newValue, ...extra, provenance: { ...(n.provenance as object), [provKey]: provenanceEntry("nanny", n.userId) }, updatedAt: new Date() }).where(eq(s.nannies.id, c.nannyId));
+      }
       await tx.update(s.profileChangeRequests).set({ status: approve ? "approved" : "rejected", decidedBy: u.id, decidedAt: new Date() }).where(eq(s.profileChangeRequests.id, c.id));
       await audit(u.id, `nanny.change_${approve ? "approved" : "rejected"}`, "nanny", c.nannyId, { field: c.field }, tx);
     });
     const [n] = await db.select().from(s.nannies).where(eq(s.nannies.id, c.nannyId));
-    if (n.userId) await notify(n.userId, "profile_change_decided", { field: c.field, status: approve ? "approved" : "declined" }, `change:${c.id}`, "/nanny/profile");
-    return done(`/manage/nannies/${c.nannyId}`, approve ? "Change applied." : "Change declined.");
-  });
-}
-export async function resendNannyInviteAction(_: ActionResult, fd: FormData) {
-  return run(async () => {
-    const u = await assertUser({ perm: "nannies.manage" });
-    const email = z.string().email().parse(str(fd, "email").toLowerCase());
-    const token = await issueToken("invite", 24 * 7, { email, role: "nanny", subjectId: str(fd, "nannyId"), createdBy: u.id });
-    await audit(u.id, "nanny.invite", "nanny", str(fd, "nannyId"), { email });
-    return { ok: env.demo ? `Demo invite link: /invite?token=${token}` : `Invitation sent to ${email}.` };
+    if (n.userId) await notify(n.userId, "profile_change_decided", { field: c.field === "photoKey" ? "profile photo" : c.field, status: approve ? "approved" : "declined" }, `change:${c.id}`, "/nanny/profile");
+    return done(nannyPath(c.nannyId), approve ? "Change applied." : "Change declined.");
   });
 }
 
@@ -362,3 +457,39 @@ export async function retentionAction(_: ActionResult, fd: FormData) {
   });
 }
 
+
+// ---------------- Internal tasks ----------------
+export async function saveTaskAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ role: "management" });
+    const v = z.object({ title: z.string().trim().min(2, "Give the task a title.").max(200), notes: z.string().max(2000).nullable(), priority: z.enum(["low", "normal", "high"]), dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), assigneeId: z.string().uuid().nullable() })
+      .parse({ title: str(fd, "title"), notes: opt(fd, "notes"), priority: str(fd, "priority") || "normal", dueOn: opt(fd, "dueOn"), assigneeId: opt(fd, "assigneeId") });
+    const link = { bookingId: opt(fd, "bookingId"), nannyId: opt(fd, "nannyId"), familyId: opt(fd, "familyId") };
+    const [t] = await db.insert(s.tasks).values({ ...v, ...link, createdBy: u.id }).returning();
+    if (v.assigneeId && v.assigneeId !== u.id) await notify(v.assigneeId, "support_update", { subject: `Task: ${v.title}`, status: "assigned to you" }, `task:${t.id}`, "/manage/tasks");
+    await audit(u.id, "task.create", "task", t.id);
+    revalidatePath("/manage/tasks");
+    return { ok: "Task added." };
+  });
+}
+export async function taskStatusAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ role: "management" });
+    const status = z.enum(["open", "done"]).parse(str(fd, "status"));
+    await db.update(s.tasks).set({ status, completedAt: status === "done" ? new Date() : null }).where(eq(s.tasks.id, str(fd, "taskId")));
+    await audit(u.id, `task.${status}`, "task", str(fd, "taskId"));
+    revalidatePath("/manage/tasks");
+    return { ok: status === "done" ? "Completed." : "Reopened." };
+  });
+}
+
+// ---------------- Platform settings ----------------
+export async function platformSettingsAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "settings.manage" });
+    await setSetting("addressReveal", str(fd, "addressReveal"), u.id);
+    await setSetting("requireNannyAcceptance", bool(fd, "requireNannyAcceptance"), u.id);
+    await audit(u.id, "settings.platform", "settings", "platform", { addressReveal: str(fd, "addressReveal"), requireNannyAcceptance: bool(fd, "requireNannyAcceptance") });
+    return done("/manage/admin", "Settings saved.");
+  });
+}

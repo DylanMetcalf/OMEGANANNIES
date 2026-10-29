@@ -27,8 +27,8 @@ export default async function Profile({ params }: { params: Promise<{ slug: stri
         <Avatar name={n.displayName} src={n.photoUrl} size={168} />
         <div>
           <p className="eyebrow">Omega nanny{n.isDemo ? " · demo profile" : ""}</p>
-          <h1 className="mt-2 text-[52px] leading-none">{n.displayName}</h1>
-          <p className="mt-4 max-w-2xl font-display text-[24px] italic leading-snug text-navy/90">&ldquo;{n.headline}&rdquo;</p>
+          <h1 className="mt-2 text-[36px] leading-tight">{n.displayName}</h1>
+          <p className="mt-3 max-w-2xl text-[18px] leading-snug text-muted">&ldquo;{n.headline}&rdquo;</p>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href={`/family/bookings/new?nanny=${n.id}`} className="btn-gold">Request {n.displayName.split(" ")[0]}</Link>
             <form action={toggleFavouriteAction}><input type="hidden" name="nannyId" value={n.id} /><button className="btn-secondary" aria-pressed={!!fav}>{fav ? "♥ Saved" : "♡ Save"}</button></form>

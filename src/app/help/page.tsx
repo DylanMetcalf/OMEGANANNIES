@@ -19,7 +19,7 @@ export default async function Help({ searchParams }: { searchParams: Promise<{ q
       <header className="border-b border-line bg-white"><div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4"><Link href="/"><Image src="/omega-logo.png" alt="Omega Nannies" width={130} height={44} /></Link><Link href={u ? homeFor(u) : "/login"} className="btn-secondary btn-sm">{u ? "Back to portal" : "Sign in"}</Link></div></header>
       <main id="main" className="mx-auto max-w-5xl px-5 py-10">
         <p className="eyebrow">Help centre</p>
-        <h1 className="mt-2 text-[44px]">How can we help?</h1>
+        <h1 className="mt-2 text-[34px]">How can we help?</h1>
         <form className="mt-6 flex max-w-xl gap-2" role="search"><label htmlFor="q" className="sr-only">Search help</label><input id="q" name="q" defaultValue={q} placeholder="Search bookings, payments, vetting…" className="input" /><button className="btn-primary">Search</button></form>
         {env.anthropicKey && <div className="mt-6 max-w-3xl"><AssistantBox /></div>}
         <div className="mt-10 space-y-10">

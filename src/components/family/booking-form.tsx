@@ -10,15 +10,16 @@ export function BookingRequestForm({ services, kids, locations, nannies, languag
 }) {
   const [service, setService] = useState(defaults.serviceCode ?? "holiday");
   const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
   const liveIn = service === "live_in";
   return (
     <ActionForm action={requestBookingAction} className="space-y-6">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <fieldset className="card p-5">
-        <legend className="px-1 font-display text-[22px] text-navy">1. The care you need</legend>
+        <legend className="px-1 font-display text-[16px] font-bold text-ink">1. The care you need</legend>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           {services.map((s) => (
-            <label key={s.code} className={`cursor-pointer rounded-xl border p-3 text-[14px] transition-colors ${service === s.code ? "border-navy bg-navy-50" : "border-line hover:border-navy/40"}`}>
+            <label key={s.code} className={`cursor-pointer rounded-[10px] border p-3 text-[14px] font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus ${service === s.code ? "border-navy bg-navy-50 text-navy" : "border-line hover:border-navy/40"}`}>
               <input type="radio" name="serviceCode" value={s.code} checked={service === s.code} onChange={() => setService(s.code)} className="sr-only" />{s.name}
             </label>
           ))}
@@ -28,20 +29,26 @@ export function BookingRequestForm({ services, kids, locations, nannies, languag
         </div>
       </fieldset>
       <fieldset className="card p-5">
-        <legend className="px-1 font-display text-[22px] text-navy">2. When</legend>
+        <legend className="px-1 font-display text-[16px] font-bold text-ink">2. When</legend>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <div><label className="label" htmlFor="startDate">Start date</label><input id="startDate" name="startDate" type="date" min={today} required value={start} onChange={(e) => setStart(e.target.value)} className="input" /></div>
-          <div><label className="label" htmlFor="endDate">End date</label><input id="endDate" name="endDate" type="date" min={start || today} className="input" aria-describedby="end-hint" /><p id="end-hint" className="mt-1 text-[12px] text-muted">Leave empty for a single day.</p></div>
+          <div><label className="label" htmlFor="endDate">End date</label><input id="endDate" name="endDate" type="date" min={start || today} value={end} onChange={(e) => setEnd(e.target.value)} className="input" aria-describedby="end-hint" /><p id="end-hint" className="mt-1 text-[12px] text-muted">Leave empty for a single day.</p></div>
           {!liveIn && <>
             <div><label className="label" htmlFor="startTime">Daily start</label><input id="startTime" name="startTime" type="time" step={900} defaultValue={defaults.startTime ?? "09:00"} className="input" /></div>
             <div><label className="label" htmlFor="endTime">Daily finish</label><input id="endTime" name="endTime" type="time" step={900} defaultValue={defaults.endTime ?? "17:00"} className="input" aria-describedby="time-hint" /><p id="time-hint" className="mt-1 text-[12px] text-muted">Hourly bookings have a 4-hour minimum. A finish before the start runs overnight.</p></div>
           </>}
           {liveIn && <p className="rounded-lg bg-cream p-3 text-[13px] text-muted sm:col-span-2">Live-in care is 24/7 for the dates you choose. We&rsquo;ll agree days off and routines with you.</p>}
         </div>
-        {!liveIn && <label className="mt-4 flex items-center gap-2 text-[14px]"><input type="checkbox" name="overnight" className="accent-navy" />Includes overnight care</label>}
+        {!liveIn && end && end > start && (
+          <fieldset className="mt-4">
+            <legend className="label">Which days? <span className="font-normal text-muted">(leave all ticked for every day)</span></legend>
+            <div className="flex flex-wrap gap-2">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => <label key={d} className="chip"><input type="checkbox" name="weekdays" value={(i + 1) % 7} defaultChecked className="sr-only" />{d}</label>)}</div>
+          </fieldset>
+        )}
+        {!liveIn && <label className="mt-4 flex items-center gap-2 text-[14px]"><input type="checkbox" name="overnight" className="h-4 w-4 accent-navy" />Includes overnight care</label>}
       </fieldset>
       <fieldset className="card p-5">
-        <legend className="px-1 font-display text-[22px] text-navy">3. Who and where</legend>
+        <legend className="px-1 font-display text-[16px] font-bold text-ink">3. Who and where</legend>
         {kids.length ? <div className="mt-3 flex flex-wrap gap-2">{kids.map((c) => <label key={c.id} className="flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-[14px]"><input type="checkbox" name="childIds" value={c.id} defaultChecked={defaults.childIds?.includes(c.id) ?? true} className="accent-navy" />{c.label}</label>)}</div>
           : <p className="mt-3 text-[14px] text-bad">Add your children first under <a className="link" href="/family/children">Children</a>.</p>}
         <div className="mt-4"><label className="label" htmlFor="serviceLocationId">Location</label>
@@ -50,7 +57,7 @@ export function BookingRequestForm({ services, kids, locations, nannies, languag
         </div>
       </fieldset>
       <fieldset className="card p-5">
-        <legend className="px-1 font-display text-[22px] text-navy">4. Preferences</legend>
+        <legend className="px-1 font-display text-[16px] font-bold text-ink">4. Preferences</legend>
         <div className="mt-3 flex flex-wrap gap-4 text-[14px]">
           <label className="flex items-center gap-2"><input type="checkbox" name="needsDriver" className="accent-navy" />Nanny must drive</label>
           <label className="flex items-center gap-2"><input type="checkbox" name="specialistCare" className="accent-navy" />Additional-needs / specialist care</label>

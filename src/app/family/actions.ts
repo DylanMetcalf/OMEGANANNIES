@@ -7,14 +7,15 @@ import { db, schema as s } from "@/db";
 import { audit } from "@/lib/audit";
 import { assertUser } from "@/lib/auth";
 import { acceptQuotation, bookingAccess, createBookingRequest, DomainError, familyIdsOf, transition } from "@/lib/bookings";
-import { hashPassword, verifyPassword } from "@/lib/crypto";
-import { bool, list, opt, password, run, str } from "@/lib/forms";
+import { bool, list, opt, run, str } from "@/lib/forms";
 import { parseMoney } from "@/lib/money";
 import { deliverPending } from "@/lib/notify";
 import { startPayment } from "@/lib/payments/service";
 import { hhmmToMinutes } from "@/lib/time";
 import { issueToken } from "@/lib/tokens";
 import { env } from "@/lib/env";
+import { rateLimit } from "@/lib/rate-limit";
+import { storeDocumentUpload } from "@/lib/uploads";
 import type { ActionResult } from "@/components/action-form";
 
 async function familyUser() {
@@ -39,6 +40,7 @@ export async function requestBookingAction(_: ActionResult, fd: FormData): Promi
       overnight: bool(fd, "overnight"), needsDriver: bool(fd, "needsDriver"), requiredLanguages: list(fd, "languages"), specialistCare: bool(fd, "specialistCare"),
       budgetMaxMinor: str(fd, "budget") ? parseMoney(str(fd, "budget")) : null, specialRequests: opt(fd, "specialRequests")?.slice(0, 2000) ?? null,
       idempotencyKey: z.string().uuid().parse(str(fd, "idempotencyKey")), termsAccepted: bool(fd, "terms"),
+      weekdays: list(fd, "weekdays").map(Number).filter((w) => Number.isInteger(w) && w >= 0 && w <= 6),
     });
     void deliverPending();
     id = b.id;
@@ -172,36 +174,31 @@ export async function submitReviewAction(_: ActionResult, fd: FormData): Promise
   });
 }
 
-export async function savePreferencesAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
-  return run(async () => {
-    const u = await assertUser();
-    const v = { emailBookings: bool(fd, "emailBookings"), emailMessages: bool(fd, "emailMessages"), emailReminders: bool(fd, "emailReminders"), marketingOptIn: bool(fd, "marketingOptIn") };
-    await db.insert(s.notificationPreferences).values({ userId: u.id, ...v }).onConflictDoUpdate({ target: s.notificationPreferences.userId, set: v });
-    await db.insert(s.consents).values({ userId: u.id, policy: "marketing", version: "2026-10", granted: v.marketingOptIn });
-    return { ok: "Preferences saved." };
-  });
-}
-export async function changePasswordAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
-  return run(async () => {
-    const u = await assertUser();
-    const [row] = await db.select().from(s.users).where(eq(s.users.id, u.id));
-    if (!(await verifyPassword(str(fd, "current"), row.passwordHash))) throw new DomainError("Your current password is incorrect.");
-    await db.update(s.users).set({ passwordHash: await hashPassword(password.parse(str(fd, "next"))) }).where(eq(s.users.id, u.id));
-    await audit(u.id, "auth.password_change", "user", u.id);
-    return { ok: "Password changed." };
-  });
-}
-export async function privacyRequestAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
-  return run(async () => {
-    const u = await assertUser();
-    const kind = z.enum(["export", "correction", "closure"]).parse(str(fd, "kind"));
-    await db.insert(s.supportRequests).values({ userId: u.id, subject: `Privacy request: ${kind}`, body: opt(fd, "details") ?? `User requested data ${kind}.`, category: "privacy" });
-    await audit(u.id, `privacy.request_${kind}`, "user", u.id);
-    return { ok: "Request received. We'll respond within the period required by POPIA (usually 30 days)." };
-  });
-}
 export async function markNotificationsReadAction() {
   const u = await assertUser();
   await db.update(s.notifications).set({ readAt: new Date() }).where(and(eq(s.notifications.userId, u.id), eq(s.notifications.channel, "in_app")));
   revalidatePath("/", "layout");
+}
+
+export async function uploadFamilyDocumentAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const { u, familyId } = await familyUser();
+    if (!(await rateLimit(`upload:${u.id}`, 10, 3600))) throw new DomainError("Upload limit reached. Try again later.");
+    const docType = z.enum(["medical_note", "travel_document", "booking_document", "other"]).parse(str(fd, "docType"));
+    const f = await storeDocumentUpload(fd.get("file"));
+    const [d] = await db.insert(s.documents).values({ ownerFamilyId: familyId, docType, fileName: f.fileName, mimeType: f.mime, sizeBytes: f.size, storageKey: f.key, sha256: f.sha256, scanStatus: f.scan, status: "approved", uploadedBy: u.id }).returning();
+    await audit(u.id, "document.upload", "document", d.id, { docType, scan: f.scan });
+    revalidatePath("/family/documents");
+    return { ok: "Uploaded. Only your household and authorised Omega staff can open it." };
+  });
+}
+export async function deleteFamilyDocumentAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const { u, familyId } = await familyUser();
+    const r = await db.delete(s.documents).where(and(eq(s.documents.id, str(fd, "documentId")), eq(s.documents.ownerFamilyId, familyId))).returning();
+    if (!r.length) throw new DomainError("Document not found.");
+    await audit(u.id, "document.delete", "document", r[0].id);
+    revalidatePath("/family/documents");
+    return { ok: "Deleted." };
+  });
 }

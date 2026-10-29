@@ -30,14 +30,14 @@ const manager = await user("manager.demo@example.com", "Morgan Manager (Demo)", 
 await user("ops.demo@example.com", "Olivia Ops (Demo)", "ops", ["bookings.manage"]);
 
 // ---- Nannies (synthetic) ----
-type N = { name: string; email?: string; status: "approved" | "onboarding"; services: string[]; langs: string[]; ages: string[]; areas: string[]; years: number; drive: boolean; headline: string; bio: string; skills: string[]; specialist?: string; firstAidExpiry?: string };
+type N = { name: string; email?: string; status: "approved" | "onboarding" | "draft"; services: string[]; langs: string[]; ages: string[]; areas: string[]; years: number; drive: boolean; headline: string; bio: string; skills: string[]; specialist?: string; firstAidExpiry?: string };
 const NANNIES: N[] = [
   { name: "Amahle N.", email: "nanny.demo@example.com", status: "approved", services: ["holiday", "event", "night"], langs: ["English", "isiXhosa"], ages: ["toddler", "preschool", "school"], areas: ["Atlantic Seaboard", "City Bowl & Waterfront"], years: 8, drive: true, headline: "Beach days, bedtime stories and calm, happy routines.", bio: "A former Grade R assistant with eight years in private childcare, Amahle builds trust quickly and keeps little ones busy with outdoor play, crafts and swimming supervision.", skills: ["Swimming supervision", "Outdoor play", "Arts & crafts"], firstAidExpiry: day(20) },
   { name: "Lerato M.", email: "nanny2.demo@example.com", status: "approved", services: ["live_in", "holiday", "special_needs"], langs: ["English", "Afrikaans"], ages: ["newborn", "toddler", "preschool", "school"], areas: ["Southern Suburbs", "Cape Winelands"], years: 12, drive: true, headline: "Twelve years of live-in care for travelling families.", bio: "Lerato has travelled with families across the Western Cape and on safari. She is trained in Montessori principles and has supported children with autism and ADHD.", skills: ["Montessori approach", "Travel experience", "Sleep routines"], specialist: "Autism and ADHD support; sensory-friendly routines." },
   { name: "Charlotte B.", status: "approved", services: ["holiday", "event"], langs: ["English", "French", "German"], ages: ["preschool", "school", "teen"], areas: ["Atlantic Seaboard", "Cape Winelands"], years: 5, drive: false, headline: "Trilingual, sporty and endlessly curious.", bio: "Charlotte grew up between Lyon and Cape Town and loves hiking, tennis and homework help in three languages.", skills: ["Homework support", "Outdoor play"] },
   { name: "Thandi K.", email: "nanny3.demo@example.com", status: "approved", services: ["night", "holiday"], langs: ["English", "isiXhosa"], ages: ["newborn", "toddler"], areas: ["Southern Suburbs", "City Bowl & Waterfront"], years: 10, drive: true, headline: "Newborn and night-time specialist.", bio: "Thandi supports new parents with feeds, settling and gentle sleep routines so everyone gets some rest.", skills: ["Newborn care", "Sleep routines"] },
   { name: "Marguerite V.", status: "approved", services: ["granny", "holiday"], langs: ["English", "Afrikaans", "Dutch"], ages: ["toddler", "preschool", "school"], areas: ["Cape Winelands", "Garden Route"], years: 30, drive: true, headline: "A grandmother's warmth with a professional's standards.", bio: "Mother of three and grandmother of five, Marguerite brings baking, gardening and storytelling to every family.", skills: ["Meal preparation", "Arts & crafts"] },
-  { name: "Johanna S.", status: "onboarding", services: ["holiday"], langs: ["English"], ages: ["school"], areas: ["Garden Route"], years: 3, drive: false, headline: "Newly invited — vetting in progress.", bio: "Profile under review.", skills: [] },
+  { name: "Johanna S.", status: "draft", services: ["holiday"], langs: ["English"], ages: ["school"], areas: ["Garden Route"], years: 3, drive: false, headline: "Prepared by Omega — awaiting invitation.", bio: "Profile being prepared.", skills: [] },
 ];
 const nannyRows: Record<string, typeof s.nannies.$inferSelect> = {};
 for (const n of NANNIES) {
@@ -46,6 +46,7 @@ for (const n of NANNIES) {
     userId: u?.id, displayName: n.name, slug: n.name.toLowerCase().replace(/[^a-z]+/g, "-").replace(/-$/, ""), status: n.status, published: n.status === "approved",
     headline: n.headline, bio: n.bio, yearsExperience: n.years, services: n.services, languages: n.langs, ageGroups: n.ages, areas: n.areas, canDrive: n.drive, hasOwnCar: n.drive,
     skills: n.skills, specialistExperience: n.specialist ?? null, isDemo: true, internalNotes: "Synthetic demo profile.",
+    contactEmail: n.email ?? (n.status === "draft" ? "johanna.demo@example.com" : null), provenance: { displayName: { source: "admin", verified: true } },
   }).returning();
   nannyRows[n.name] = row;
   await db.insert(s.qualifications).values([{ nannyId: row.id, name: "Paediatric First Aid (Level 1)", issuer: "St John (Demo)", verified: n.status === "approved", expiresOn: n.firstAidExpiry ?? day(400) }]);
@@ -87,7 +88,7 @@ let refN = 100;
 async function booking(o: { fam?: typeof w; nanny?: string; service: string; start: string; end: string; from: number; to: number; status: typeof s.bookings.$inferInsert.status; loc?: string; kidIdx?: number[]; liveIn?: boolean; quote?: { total: number; deposit: number; lines: unknown[]; status: string }; paid?: ("deposit" | "balance")[]; enquiry?: Partial<typeof s.bookings.$inferInsert> }) {
   const nannyId = o.nanny ? nannyRows[o.nanny].id : null;
   const [b] = await db.insert(s.bookings).values({
-    reference: `ON-DEMO-${refN++}`, familyId: o.fam?.f.id ?? null, nannyId, serviceCode: o.service, status: o.status, startDate: o.start, endDate: o.end,
+    reference: `ON-DEMO-${refN++}`, familyId: o.fam?.f.id ?? null, nannyId, nannyResponse: nannyId ? "accepted" : null, serviceCode: o.service, status: o.status, startDate: o.start, endDate: o.end,
     dailyStartMinute: o.from, dailyEndMinute: o.to, serviceLocationId: o.loc ?? null, liveIn: !!o.liveIn, isDemo: true, createdBy: o.fam?.u.id ?? null,
     source: o.enquiry ? "website" : "portal", termsAcceptedAt: o.fam ? new Date() : null, termsVersion: o.fam ? "2026-10" : null, ...o.enquiry,
   }).returning();
@@ -134,6 +135,16 @@ await db.insert(s.notifications).values([
   { userId: w.u.id, dedupeKey: "seed:quote", channel: "in_app", template: "quote_ready", subject: "Your live-in quotation is ready", body: "Review and accept your quotation to hold Lerato's dates.", status: "sent", link: "/family/bookings" },
   { userId: nannyU.id, dedupeKey: "seed:doc", channel: "in_app", template: "document_expiring", subject: "First Aid certificate expires soon", body: "Please upload a renewed certificate.", status: "sent", link: "/nanny/documents" },
 ]);
+await db.insert(s.tasks).values([
+  { title: "Call Van der Berg family about night-nanny match", priority: "high", dueOn: day(1), assigneeId: manager.id, familyId: v.f.id, createdBy: manager.id },
+  { title: "Renew Amahle’s First Aid before December bookings", dueOn: day(14), assigneeId: manager.id, nannyId: nannyRows["Amahle N."].id, createdBy: manager.id },
+]);
+// Real public business information: the nanny profiles published on omeganannies.com, imported as unpublished,
+// unverified drafts (no checks, no approval). Requires network access; skipped with a warning otherwise.
+try {
+  const { importWebsiteNannies } = await import("../src/lib/website-import");
+  const r = await importWebsiteNannies(admin.id, { isDemo: true });
+  console.log(`Website import: ${r.found} found, ${r.created} drafts, ${r.photos} photos`);
+} catch (e) { console.warn("Website import skipped:", (e as Error).message); }
 console.log("Demo data seeded. Password for all demo accounts: OmegaDemo2026!");
 await pool.end();
-void admin;

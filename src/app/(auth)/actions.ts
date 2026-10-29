@@ -7,6 +7,7 @@ import { audit } from "@/lib/audit";
 import { clientIp, createSession, destroySession, getCurrentUser } from "@/lib/auth";
 import { hashPassword, sha256, verifyPassword, verifyTotp } from "@/lib/crypto";
 import { issueToken } from "@/lib/tokens";
+import { claimInvitation } from "@/lib/onboarding";
 import { env } from "@/lib/env";
 import { bool, email, password, run, str } from "@/lib/forms";
 import { deliverPending, notify } from "@/lib/notify";
@@ -82,14 +83,18 @@ export async function registerFamilyAction(_: ActionResult, fd: FormData): Promi
   });
 }
 
-export async function verifyEmailAction(token: string): Promise<string | null> {
-  try {
-    const t = await consumeToken("verify_email", token);
+/** Verification needs an explicit POST so email link-scanners that prefetch links can't consume the token. */
+export async function verifyEmailAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const r = await run(async () => {
+    if (!(await rateLimit(`verify:${await clientIp()}`, 20, 900))) throw new DomainError("Too many attempts. Please wait and try again.");
+    const t = await consumeToken("verify_email", str(fd, "token"));
     await db.update(s.users).set({ emailVerifiedAt: new Date(), status: "active" }).where(and(eq(s.users.id, t.userId!), eq(s.users.status, "pending")));
     await db.update(s.users).set({ emailVerifiedAt: new Date() }).where(eq(s.users.id, t.userId!));
     await audit(t.userId!, "auth.email_verified", "user", t.userId!);
-    return null;
-  } catch (e) { return (e as Error).message; }
+    return { ok: "verified" };
+  });
+  if (r?.ok) redirect("/login?verified=1");
+  return r;
 }
 
 export async function forgotPasswordAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -123,7 +128,9 @@ export async function acceptInviteAction(_: ActionResult, fd: FormData): Promise
   const r = await run(async () => {
     const v = z.object({ name: z.string().min(2).max(120), password }).parse({ name: str(fd, "name"), password: str(fd, "password") });
     if (!bool(fd, "privacy")) throw new DomainError("Please accept the privacy notice.");
+    if (!(await rateLimit(`invite:${await clientIp()}`, 10, 900))) throw new DomainError("Too many attempts. Please wait 15 minutes and try again.");
     const t = await consumeToken("invite", str(fd, "token"));
+    if (t.role === "nanny") throw new DomainError("This invitation format is no longer valid. Please ask Omega Nannies for a new invitation.");
     const [exists] = await db.select().from(s.users).where(sql`lower(${s.users.email}) = ${t.email!.toLowerCase()}`);
     if (exists) throw new DomainError("An account already exists for this email. Please sign in.");
     const hash = await hashPassword(v.password);
@@ -155,3 +162,13 @@ export async function mfaAction(_: ActionResult, fd: FormData): Promise<ActionRe
   return r;
 }
 
+
+export async function claimAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const r = await run(async () => {
+    if (!bool(fd, "privacy")) throw new DomainError("Please accept the privacy notice.");
+    await claimInvitation({ token: str(fd, "token"), email: str(fd, "email"), name: str(fd, "name"), password: str(fd, "password"), ip: await clientIp() });
+    return { ok: "claimed" };
+  });
+  if (r?.ok) redirect("/login?welcome=1");
+  return r;
+}

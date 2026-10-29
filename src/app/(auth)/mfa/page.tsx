@@ -8,7 +8,7 @@ export default async function Mfa() {
   if (!(await getCurrentUser())) redirect("/login");
   return (
     <>
-      <h1 className="text-[36px]">Two-step verification</h1>
+      <h1 className="text-[28px]">Two-step verification</h1>
       <p className="mt-2 text-muted">Enter the 6-digit code from your authenticator app.</p>
       <ActionForm action={mfaAction} className="mt-8 space-y-4">
         <input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required className="input text-center text-[22px] tracking-[0.5em]" aria-label="Verification code" />

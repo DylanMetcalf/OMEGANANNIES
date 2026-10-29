@@ -3,6 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { dates, hours } from "@/components/booking/parts";
 import { Empty, Notice, PageHeader, Section, Stat, StatusBadge } from "@/components/ui";
+import { ActionForm, Submit } from "@/components/action-form";
+import { respondOfferAction } from "./actions";
 import { requireUser } from "@/lib/auth";
 import { nannyOf } from "@/lib/bookings";
 import { nannyBookings, profileCompletion } from "@/lib/nanny-data";
@@ -16,7 +18,9 @@ export default async function NannyHome() {
   if (!n) return <Empty title="Profile not linked">Please contact Omega Nannies to link your profile.</Empty>;
   const today = new Date().toISOString().slice(0, 10);
   const active = await nannyBookings(n.id, ["confirmed", "in_progress"]);
-  const intros = await nannyBookings(n.id, ["introduction", "quotation", "awaiting_approval", "awaiting_payment"]);
+  const pipeline = await nannyBookings(n.id, ["matching", "introduction", "quotation", "awaiting_approval", "awaiting_payment"]);
+  const offers = pipeline.filter(({ b }) => b.nannyResponse === "pending");
+  const intros = pipeline.filter(({ b }) => b.nannyResponse !== "pending");
   const docs = await db.select().from(s.documents).where(eq(s.documents.ownerNannyId, n.id));
   const checks = await db.select().from(s.verificationChecks).where(and(eq(s.verificationChecks.nannyId, n.id), sql`${s.verificationChecks.expiresOn} <= (current_date + 45)`));
   const meetings = await db.select({ m: s.meetings, ref: s.bookings.reference }).from(s.meetings).innerJoin(s.bookings, eq(s.bookings.id, s.meetings.bookingId)).where(and(eq(s.bookings.nannyId, n.id), sql`${s.meetings.startsAt} > now()`, sql`${s.meetings.status} <> 'cancelled'`));
@@ -25,8 +29,23 @@ export default async function NannyHome() {
   const now = active.filter(({ b }) => b.startDate <= today && b.endDate >= today);
   return (
     <>
-      <PageHeader eyebrow={new Intl.DateTimeFormat("en-ZA", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Johannesburg" }).format(new Date())} title={`Hello, ${n.displayName.split(" ")[0]}`} description={n.status !== "approved" ? "Your profile is being reviewed by Omega. You'll be bookable once vetting is complete." : undefined} />
+      <PageHeader eyebrow={new Intl.DateTimeFormat("en-ZA", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Johannesburg" }).format(new Date())} title={`Hello, ${n.displayName.split(" ")[0]}`}  />
       {checks.map((c) => <div key={c.id} className="mb-3"><Notice tone={c.expiresOn! < today ? "bad" : "warn"} title={`${c.kind.replace("_", " ")} ${c.expiresOn! < today ? "expired" : "expires " + fmtDate(c.expiresOn!)}`}>Upload a renewed copy under <Link className="link" href="/nanny/documents">Documents</Link> to stay bookable.</Notice></div>)}
+      {offers.length > 0 && (
+        <section className="card mb-6 border-gold/40 p-5" aria-labelledby="offers-h">
+          <h2 id="offers-h" className="text-[16px]">Booking offers waiting for you</h2>
+          <ul className="mt-3 divide-y divide-line">{offers.map(({ b, area }) => (
+            <li key={b.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div><p className="font-semibold">{dates(b)} · {hours(b)}</p><p className="text-[13px] text-muted">{svc[b.serviceCode]} · {area ?? b.areaText ?? "Area to be confirmed"}</p></div>
+              <div className="flex gap-2">
+                <ActionForm action={respondOfferAction}><input type="hidden" name="bookingId" value={b.id} /><Submit name="response" value="accept" className="btn-primary btn-sm">Accept</Submit></ActionForm>
+                <ActionForm action={respondOfferAction} confirm="Decline this booking offer?"><input type="hidden" name="bookingId" value={b.id} /><Submit name="response" value="decline" className="btn-secondary btn-sm">Decline</Submit></ActionForm>
+              </div>
+            </li>
+          ))}</ul>
+        </section>
+      )}
+      {n.status !== "approved" && <div className="mb-6"><Notice tone="info" title="Finish setting up your profile">Complete your onboarding so Omega can approve you. <Link className="link" href="/nanny/onboarding">Continue</Link></Notice></div>}
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Today" value={now.length} hint={now.length ? "booking in progress" : "No care today"} />
         <Stat label="Upcoming" value={active.length} href="/nanny/bookings" />

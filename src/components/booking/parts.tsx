@@ -6,7 +6,9 @@ import type { BookingDetail } from "@/lib/queries";
 import type { QuoteLine } from "@/lib/pricing";
 
 export const dates = (b: { startDate: string; endDate: string }) => (b.startDate === b.endDate ? fmtDate(b.startDate) : `${fmtDate(b.startDate)} – ${fmtDate(b.endDate)}`);
-export const hours = (b: { dailyStartMinute: number; dailyEndMinute: number; liveIn: boolean }) => (b.liveIn ? "24/7 live-in" : `${minutesToHHMM(b.dailyStartMinute)}–${minutesToHHMM(b.dailyEndMinute)}`);
+const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const hours = (b: { dailyStartMinute: number; dailyEndMinute: number; liveIn: boolean; weekdays?: number[] | null }) =>
+  b.liveIn ? "24/7 live-in" : `${minutesToHHMM(b.dailyStartMinute)}–${minutesToHHMM(b.dailyEndMinute)}${b.weekdays?.length ? ` · ${[...b.weekdays].sort((a, c) => ((a + 6) % 7) - ((c + 6) % 7)).map((w) => WD[w]).join(", ")}` : ""}`;
 
 const JOURNEY: BookingStatus[] = ["enquiry", "matching", "quotation", "awaiting_approval", "awaiting_payment", "confirmed", "completed"];
 /** Visual progress for families: where the booking is and what happens next. */

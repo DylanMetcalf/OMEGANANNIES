@@ -7,7 +7,7 @@ export default function Register() {
   return (
     <>
       <p className="eyebrow">For families</p>
-      <h1 className="mt-2 text-[38px]">Create your family account</h1>
+      <h1 className="mt-2 text-[28px]">Create your family account</h1>
       <p className="mt-2 text-muted">Request bookings, meet nannies, pay securely and message our team — all in one place.</p>
       <ActionForm action={registerFamilyAction} className="mt-8 space-y-4">
         <div><label className="label" htmlFor="name">Your full name</label><input id="name" name="name" autoComplete="name" required className="input" /></div>

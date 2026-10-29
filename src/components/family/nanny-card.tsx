@@ -16,7 +16,7 @@ export function NannyCard({ n, saved, free, rating, svcNames, compare }: { n: Pu
           <p className="text-[13px] text-muted">{n.yearsExperience} years · {n.languages.join(", ")}{rating ? ` · ★ ${rating.avg} (${rating.n})` : ""}</p>
         </div>
       </div>
-      <p className="px-5 font-display text-[18px] italic leading-snug text-navy/90">&ldquo;{n.headline}&rdquo;</p>
+      <p className="px-5 text-[15px] leading-snug text-muted">&ldquo;{n.headline}&rdquo;</p>
       <div className="flex flex-wrap gap-1.5 px-5 pt-4">
         {n.services.slice(0, 3).map((x) => <Badge key={x}>{svcNames[x] ?? x}</Badge>)}
         {n.canDrive && <Badge tone="info">Drives</Badge>}

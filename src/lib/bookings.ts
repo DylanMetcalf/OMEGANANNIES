@@ -9,8 +9,9 @@ import { notify, notifyMany } from "./notify";
 import { can, isManagement, type Permission } from "./permissions";
 import { calculateQuote, type PriceItem } from "./pricing";
 import { rank, type Candidate, type MatchRequirements } from "./matching";
-import { ageFrom, ageGroup, buildSessions, eachDate, fmtDate, weekday } from "./time";
+import { ageFrom, ageGroup, buildSessions, careDates, eachDate, fmtDate, weekday } from "./time";
 import type { CurrentUser } from "./auth";
+import { getSetting } from "./settings";
 
 export class DomainError extends Error {}
 export class ConflictError extends DomainError {}
@@ -25,8 +26,7 @@ export async function nannyOf(userId: string) {
   return n ?? null;
 }
 export type Access = { level: "none" | "family" | "nanny" | "management"; sensitive: boolean; preciseLocation: boolean };
-const NANNY_VISIBLE: BookingStatus[] = ["introduction", "quotation", "awaiting_approval", "awaiting_payment", "confirmed", "in_progress", "completed", "disputed"];
-const NANNY_FULL: BookingStatus[] = ["confirmed", "in_progress"];
+const NANNY_VISIBLE: BookingStatus[] = ["matching", "introduction", "quotation", "awaiting_approval", "awaiting_payment", "confirmed", "in_progress", "completed", "disputed"];
 
 /** Single source of truth for who may see what on a booking. Enforced server-side on every read. */
 export async function bookingAccess(u: CurrentUser, b: Booking): Promise<Access> {
@@ -34,8 +34,10 @@ export async function bookingAccess(u: CurrentUser, b: Booking): Promise<Access>
   if (u.roles.includes("family") && b.familyId && (await familyIdsOf(u.id)).includes(b.familyId)) return { level: "family", sensitive: true, preciseLocation: true };
   if (u.roles.includes("nanny") && b.nannyId) {
     const n = await nannyOf(u.id);
-    if (n && n.id === b.nannyId && NANNY_VISIBLE.includes(b.status)) {
-      const full = NANNY_FULL.includes(b.status);
+    // A declined offer is no longer visible to the nanny.
+    if (n && n.id === b.nannyId && NANNY_VISIBLE.includes(b.status) && b.nannyResponse !== "declined") {
+      const reveal = await getSetting("addressReveal");
+      const full = reveal === "confirmed" ? ["confirmed", "in_progress"].includes(b.status) : b.status === "in_progress";
       return { level: "nanny", sensitive: full, preciseLocation: full };
     }
   }
@@ -75,7 +77,7 @@ export type BookingRequestInput = {
   familyId: string; serviceCode: string; startDate: string; endDate: string; dailyStartMinute: number; dailyEndMinute: number;
   serviceLocationId: string | null; childIds: string[]; requestedNannyId: string | null; liveIn: boolean; overnight: boolean;
   needsDriver: boolean; requiredLanguages: string[]; specialistCare: boolean; budgetMaxMinor: number | null;
-  specialRequests: string | null; idempotencyKey: string; termsAccepted: boolean;
+  specialRequests: string | null; idempotencyKey: string; termsAccepted: boolean; weekdays?: number[] | null;
 };
 
 export async function createBookingRequest(u: CurrentUser, i: BookingRequestInput): Promise<Booking> {
@@ -101,7 +103,9 @@ export async function createBookingRequest(u: CurrentUser, i: BookingRequestInpu
     if (!loc) throw new DomainError("Invalid location.");
   }
   const tz = "Africa/Johannesburg";
-  const sessions = buildSessions({ ...i, timeZone: tz });
+  const weekdays = i.weekdays?.length && i.weekdays.length < 7 ? [...new Set(i.weekdays)].filter((w) => w >= 0 && w <= 6).sort() : null;
+  const sessions = buildSessions({ ...i, weekdays, timeZone: tz });
+  if (!sessions.length) throw new DomainError("None of the chosen weekdays fall within those dates.");
   try {
     return await db.transaction(async (tx) => {
       const [b] = await tx.insert(s.bookings).values({
@@ -109,7 +113,7 @@ export async function createBookingRequest(u: CurrentUser, i: BookingRequestInpu
         dailyStartMinute: i.dailyStartMinute, dailyEndMinute: i.dailyEndMinute, timeZone: tz, serviceLocationId: i.serviceLocationId,
         requestedNannyId: i.requestedNannyId, liveIn: i.liveIn, overnight: i.overnight, needsDriver: i.needsDriver,
         requiredLanguages: i.requiredLanguages, specialistCare: i.specialistCare, budgetMaxMinor: i.budgetMaxMinor,
-        specialRequests: i.specialRequests, idempotencyKey: i.idempotencyKey, termsAcceptedAt: new Date(), termsVersion: "2026-10",
+        specialRequests: i.specialRequests, idempotencyKey: i.idempotencyKey, weekdays, termsAcceptedAt: new Date(), termsVersion: "2026-10",
         createdBy: u.id, source: "portal", isDemo: u.isDemo,
       }).returning();
       await tx.insert(s.bookingChildren).values(i.childIds.map((childId) => ({ bookingId: b.id, childId })));
@@ -198,7 +202,7 @@ export async function loadCandidates(b: Booking): Promise<Candidate[]> {
   const overlaps = (a: { startsAt: Date; endsAt: Date }) => sess.some((x) => x.startsAt < a.endsAt && x.endsAt > a.startsAt);
   return nannies.map((n) => {
     const myRules = rules.filter((r) => r.nannyId === n.id);
-    const outside = myRules.length ? eachDate(b.startDate, b.endDate).filter((d) => !myRules.some((r) => r.weekday === weekday(d) && r.startMinute <= b.dailyStartMinute && (b.liveIn || r.endMinute >= b.dailyEndMinute))) : [];
+    const outside = myRules.length ? careDates(b).filter((d) => !myRules.some((r) => r.weekday === weekday(d) && r.startMinute <= b.dailyStartMinute && (b.liveIn || r.endMinute >= b.dailyEndMinute))) : [];
     return {
       id: n.id, displayName: n.displayName, status: n.status, published: n.published, services: n.services, languages: n.languages, ageGroups: n.ageGroups,
       areas: n.areas, canDrive: n.canDrive, yearsExperience: n.yearsExperience, specialistExperience: n.specialistExperience, skills: n.skills,
@@ -251,9 +255,32 @@ export async function assignNanny(u: CurrentUser, bookingId: string, nannyId: st
       if (isConflict(e)) throw new ConflictError("That nanny already has a confirmed booking overlapping these dates.");
       throw e;
     }
-    await tx.update(s.bookings).set({ nannyId, updatedAt: new Date() }).where(eq(s.bookings.id, b.id));
+    await tx.update(s.bookings).set({ nannyId, nannyResponse: "pending", nannyRespondedAt: null, updatedAt: new Date() }).where(eq(s.bookings.id, b.id));
     await tx.insert(s.bookingEvents).values({ bookingId: b.id, kind: result.eligible ? "assignment" : "match_override", note: overrideReason ?? `Assigned ${result.displayName} (score ${result.score})`, data: { nannyId, score: result.score, eligible: result.eligible }, internal: true, actorId: u.id });
     await audit(u.id, result.eligible ? "booking.assign" : "booking.assign_override", "booking", b.id, { nannyId, reason: overrideReason }, tx);
+    const nu = await nannyUserId(nannyId, tx);
+    if (nu) {
+      const area = b.serviceLocationId ? (await tx.select({ a: s.serviceLocations.area }).from(s.serviceLocations).where(eq(s.serviceLocations.id, b.serviceLocationId)))[0]?.a : b.areaText;
+      const [svc] = await tx.select({ name: s.serviceCategories.name }).from(s.serviceCategories).where(eq(s.serviceCategories.code, b.serviceCode));
+      // Offer notification carries area only — never the address or children's details.
+      await notify(nu, "booking_offer", { ref: b.reference, service: svc?.name ?? b.serviceCode, dates: dateRange(b), area: area ?? "area to be confirmed" }, `offer:${b.id}:${nannyId}`, `/nanny/bookings/${b.id}`, tx);
+    }
+  });
+}
+
+/** The assigned nanny accepts or declines an offered booking. Server-checked: only the assigned nanny, only while pending. */
+export async function respondToOffer(u: CurrentUser, bookingId: string, accept: boolean, note?: string) {
+  const n = await nannyOf(u.id);
+  if (!n) throw new DomainError("Booking not found");
+  return db.transaction(async (tx) => {
+    const b = await lockBooking(tx, bookingId);
+    if (b.nannyId !== n.id || b.nannyResponse !== "pending") throw new DomainError("This offer is no longer open.");
+    if (["cancelled", "declined", "completed", "refunded"].includes(b.status)) throw new DomainError("This booking is no longer active.");
+    const response = accept ? "accepted" : "declined";
+    await tx.update(s.bookings).set({ nannyResponse: response, nannyRespondedAt: new Date(), updatedAt: new Date() }).where(eq(s.bookings.id, b.id));
+    await tx.insert(s.bookingEvents).values({ bookingId: b.id, kind: "nanny_response", note: `${n.displayName} ${response} the offer${note ? `: ${note}` : ""}`, internal: true, actorId: u.id });
+    await audit(u.id, `booking.offer_${response}`, "booking", b.id, undefined, tx);
+    await notifyMany(await managementRecipients(tx), "nanny_response", { nanny: n.displayName, response, ref: b.reference, note: note ?? "" }, `offer:${b.id}:${n.id}:${response}`, `/manage/bookings/${b.id}`, tx);
   });
 }
 
@@ -271,7 +298,7 @@ export async function priceBooking(b: Booking, travelTrips = 0) {
   const [fam] = b.familyId ? await db.select().from(s.families).where(eq(s.families.id, b.familyId)) : [];
   const hol = await db.select().from(s.publicHolidays).where(and(sql`${s.publicHolidays.day} >= ${b.startDate}`, sql`${s.publicHolidays.day} <= ${b.endDate}`));
   const result = calculateQuote(pb.items, {
-    audience: fam?.audience ?? "visiting", serviceCode: b.serviceCode, dates: eachDate(b.startDate, b.endDate), dailyStartMinute: b.dailyStartMinute,
+    audience: fam?.audience ?? "visiting", serviceCode: b.serviceCode, dates: careDates(b), dailyStartMinute: b.dailyStartMinute,
     dailyEndMinute: b.dailyEndMinute, liveIn: b.liveIn, overnight: b.overnight, specialist: b.specialistCare, travelTrips, publicHolidays: new Set(hol.map((h) => h.day)),
   }, pb.book.currency);
   return { ...result, priceBookId: pb.book.id, version: pb.book.version };
@@ -310,6 +337,7 @@ export async function sendQuotation(u: CurrentUser, quotationId: string) {
     if (!q || q.status !== "draft") throw new DomainError("Only draft quotations can be sent.");
     const [b0] = await tx.select().from(s.bookings).where(eq(s.bookings.id, q.bookingId));
     if (!b0.nannyId) throw new DomainError("Assign a nanny before sending the quotation.");
+    if ((await getSetting("requireNannyAcceptance")) && b0.nannyResponse !== "accepted") throw new DomainError("Wait for the nanny to accept the offer before sending the quotation (or change this rule in Administration › Settings).");
     await tx.update(s.quotations).set({ status: "sent", sentAt: new Date() }).where(eq(s.quotations.id, q.id));
     const b = await transitionTx(tx, q.bookingId, "awaiting_approval", u, `Quotation v${q.version} sent`);
     await notifyMany(await familyUserIds(b.familyId, tx), "quote_ready", { ref: b.reference, total: formatMoney(q.totalMinor, q.currency), deposit: formatMoney(q.depositMinor, q.currency) }, `quote:${q.id}:sent`, `/family/bookings/${b.id}`, tx);
@@ -367,7 +395,8 @@ export async function reschedule(u: CurrentUser, bookingId: string, i: { startDa
     const b = await lockBooking(tx, bookingId);
     if (["completed", "cancelled", "declined", "refunded", "in_progress"].includes(b.status)) throw new DomainError("This booking can't be rescheduled.");
     const blocking = BLOCKING.includes(b.status);
-    const sessions = buildSessions({ ...i, timeZone: b.timeZone, liveIn: b.liveIn });
+    const sessions = buildSessions({ ...i, timeZone: b.timeZone, liveIn: b.liveIn, weekdays: b.weekdays });
+    if (!sessions.length) throw new DomainError("The booking’s weekdays don’t fall within the new dates.");
     await tx.delete(s.bookingSessions).where(eq(s.bookingSessions.bookingId, b.id));
     try {
       await tx.execute(sql`SAVEPOINT resched`);

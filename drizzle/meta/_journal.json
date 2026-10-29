@@ -22,6 +22,13 @@
       "when": 1793258239402,
       "tag": "0002_invite_subject",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793297032503,
+      "tag": "0003_onboarding_tasks",
+      "breakpoints": true
     }
   ]
 }

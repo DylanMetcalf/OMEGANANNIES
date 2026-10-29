@@ -3,7 +3,7 @@ import { Empty, Notice, PageHeader, Section } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { nannyOf } from "@/lib/bookings";
 import { nannyBookings } from "@/lib/nanny-data";
-import { eachDate, windowMinutes } from "@/lib/time";
+import { careDates, windowMinutes } from "@/lib/time";
 
 export const metadata = { title: "Engagements" };
 export default async function Earnings() {
@@ -11,7 +11,7 @@ export default async function Earnings() {
   const n = await nannyOf(u.id);
   if (!n) return <Empty title="Profile not linked" />;
   const done = await nannyBookings(n.id, ["completed"]);
-  const hrs = (b: (typeof done)[number]["b"]) => (b.liveIn ? eachDate(b.startDate, b.endDate).length * 24 : (eachDate(b.startDate, b.endDate).length * windowMinutes(b.dailyStartMinute, b.dailyEndMinute)) / 60);
+  const hrs = (b: (typeof done)[number]["b"]) => (b.liveIn ? careDates(b).length * 24 : (careDates(b).length * windowMinutes(b.dailyStartMinute, b.dailyEndMinute)) / 60);
   return (
     <>
       <PageHeader eyebrow="Engagements" title="Completed engagements" />

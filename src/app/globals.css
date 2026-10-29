@@ -1,82 +1,75 @@
 @import "tailwindcss";
 
-/* Omega Nannies design tokens — derived from omeganannies.com (navy / gold / cream / sand, Cormorant Garamond + DM Sans) */
+/*
+ * Omega Nannies design tokens — see docs/DESIGN_SYSTEM.md.
+ * Brand anchors (navy #1a2340, gold #c8922a) come from omeganannies.com; the app palette is a refined,
+ * more neutral evolution for software use. Utility names (navy, gold, cream, …) are kept as stable aliases.
+ */
 @theme {
-  --color-navy: #1a2340;
-  --color-navy-700: #2a3558;
-  --color-navy-50: #eef0f6;
-  --color-gold: #c8922a;
-  --color-gold-600: #a87717; /* AA on white for text */
-  --color-gold-50: #faf3e6;
-  --color-cream: #f7f3ee;
-  --color-sand: #ede5d8;
-  --color-line: #e4dccf;
-  --color-ink: #2c3347;
-  --color-muted: #5d6472; /* darker than site #6b7280 for 4.5:1 on cream */
-  --color-ok: #2f7a55;
-  --color-ok-50: #e8f4ee;
-  --color-warn: #9a6200;
-  --color-warn-50: #fdf3e1;
-  --color-bad: #b4372f;
-  --color-bad-50: #fbeceb;
-  --color-info: #2f5d8a;
-  --color-info-50: #e9f0f7;
-  --font-display: var(--font-cormorant), Georgia, serif;
-  --font-sans: var(--font-dmsans), ui-sans-serif, system-ui, sans-serif;
-  --radius-card: 14px;
-  --shadow-soft: 0 1px 2px rgb(26 35 64 / 0.04), 0 4px 16px rgb(26 35 64 / 0.05);
+  /* Brand */
+  --color-navy: #172038;       /* brand primary — nav, primary actions, headings */
+  --color-navy-700: #263152;   /* primary hover */
+  --color-navy-50: #eef0f6;    /* brand tint — selected rows, active nav */
+  --color-gold: #b9892e;       /* accent — sparing highlights, progress */
+  --color-gold-600: #8a6413;   /* accent text on light (≥4.5:1) */
+  --color-gold-50: #f8f1e3;    /* accent tint */
+  /* Neutrals */
+  --color-cream: #f7f6f3;      /* app background */
+  --color-sand: #efede8;       /* subtle surface / tracks */
+  --color-surface: #ffffff;    /* elevated surface */
+  --color-line: #e4e1da;       /* borders, dividers */
+  --color-ink: #1c2233;        /* primary text */
+  --color-muted: #5a6070;      /* secondary text (≥4.5:1 on cream) */
+  --color-subtle: #8a8f9c;     /* placeholders, disabled — never body text */
+  /* Semantic states */
+  --color-ok: #1f7a4f;   --color-ok-50: #e7f4ec;
+  --color-warn: #8f5a00; --color-warn-50: #fdf2dd;
+  --color-bad: #b42f2a;  --color-bad-50: #fbeceb;
+  --color-info: #285f97; --color-info-50: #e8f0f8;
+  --color-focus: #3d6fd9;
+  /* Type */
+  --font-display: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Shape & depth */
+  --radius-card: 12px;
+  --shadow-soft: 0 1px 2px rgb(23 32 56 / 0.04), 0 2px 8px rgb(23 32 56 / 0.04);
+  --shadow-pop: 0 12px 32px rgb(23 32 56 / 0.14), 0 2px 6px rgb(23 32 56 / 0.06);
+  --animate-in: fade-in 160ms ease-out;
+  @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 }
 
 @layer base {
   html { -webkit-text-size-adjust: 100%; }
-  body { @apply bg-cream text-ink font-sans antialiased; font-size: 15px; line-height: 1.55; }
-  h1, h2, h3 { @apply font-display text-navy; font-weight: 600; letter-spacing: 0.005em; }
+  body { @apply bg-cream text-ink font-sans antialiased; font-size: 15px; line-height: 1.55; font-feature-settings: "cv11", "ss01"; }
+  h1, h2, h3 { @apply font-display text-ink; font-weight: 700; letter-spacing: -0.02em; }
   .font-display, h1, h2, h3 { font-variant-numeric: lining-nums; }
-  :focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; border-radius: 6px; }
+  .tabular-nums, td { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 6px; }
   ::selection { background: var(--color-gold-50); }
+  dialog::backdrop { background: rgb(23 32 56 / 0.45); }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 }
 
-@utility card {
-  @apply bg-white rounded-[var(--radius-card)] border border-line shadow-[var(--shadow-soft)];
-}
-@utility eyebrow {
-  @apply text-[11px] uppercase tracking-[0.18em] text-gold-600 font-medium;
-}
-@utility label {
-  @apply block text-[13px] font-medium text-ink mb-1.5;
-}
+@utility card { @apply bg-surface rounded-[var(--radius-card)] border border-line shadow-[var(--shadow-soft)]; }
+@utility eyebrow { @apply text-[12px] uppercase tracking-[0.14em] text-gold-600 font-semibold; }
+@utility label { @apply block text-[13px] font-medium text-ink mb-1.5; }
 @utility input {
-  @apply w-full rounded-lg border border-line bg-white px-3 py-2.5 text-[15px] text-ink placeholder:text-muted/70 transition-colors focus:border-navy focus:outline-none focus:ring-2 focus:ring-gold/30 disabled:bg-cream disabled:text-muted;
+  @apply w-full rounded-[10px] border border-line bg-surface px-3 py-2.5 text-[15px] text-ink placeholder:text-subtle transition-colors focus:border-navy focus:outline-none focus:ring-3 focus:ring-focus/20 disabled:bg-sand disabled:text-muted min-h-[44px];
   &[aria-invalid="true"] { @apply border-bad; }
 }
-@utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[14px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-h-[42px];
-}
-@utility btn-primary {
-  @apply btn bg-navy text-white hover:bg-navy-700;
-}
-@utility btn-gold {
-  @apply btn bg-gold text-navy hover:bg-[#d6a03a];
-}
-@utility btn-secondary {
-  @apply btn bg-white text-navy border border-line hover:border-navy/40;
-}
-@utility btn-ghost {
-  @apply btn text-navy hover:bg-sand/60;
-}
-@utility btn-danger {
-  @apply btn bg-white text-bad border border-bad/30 hover:bg-bad-50;
-}
-@utility btn-sm {
-  @apply px-3! py-1.5! min-h-[34px]! text-[13px]!;
-}
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-4 py-2 text-[14px] font-semibold transition-[background-color,border-color,color,box-shadow] duration-150 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-h-[44px] active:translate-y-px; }
+@utility btn-primary { @apply btn bg-navy text-white hover:bg-navy-700 shadow-sm; }
+@utility btn-gold { @apply btn bg-gold text-ink hover:bg-[#c89a3f] shadow-sm; }
+@utility btn-secondary { @apply btn bg-surface text-ink border border-line hover:border-navy/30 hover:bg-cream; }
+@utility btn-ghost { @apply btn text-ink hover:bg-sand; }
+@utility btn-danger { @apply btn bg-surface text-bad border border-bad/30 hover:bg-bad-50; }
+@utility btn-sm { @apply px-3! py-1! min-h-[36px]! text-[13px]!; }
 @utility tbl {
   @apply w-full text-left text-[14px];
-  & th { @apply text-[12px] font-medium uppercase tracking-wider text-muted px-4 py-2.5 border-b border-line bg-cream/60; }
+  & th { @apply text-[12px] font-semibold uppercase tracking-wider text-muted px-4 py-2.5 border-b border-line bg-cream; }
   & td { @apply px-4 py-3 border-b border-line/70 align-top; }
   & tr:last-child td { @apply border-b-0; }
+  & tbody tr:hover td { @apply bg-cream/60; }
 }
-@utility link {
-  @apply text-navy underline decoration-gold/60 underline-offset-4 hover:decoration-gold;
-}
+@utility link { @apply text-navy font-medium underline decoration-navy/25 underline-offset-4 hover:decoration-navy; }
+@utility chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] cursor-pointer has-[:checked]:border-navy has-[:checked]:bg-navy-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus; }

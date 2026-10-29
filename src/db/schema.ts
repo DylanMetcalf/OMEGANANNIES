@@ -47,7 +47,7 @@ export const sessions = pgTable("sessions", {
   createdAt: created(),
 }, (t) => [index("sessions_user_idx").on(t.userId)]);
 
-export const authTokenKind = pgEnum("auth_token_kind", ["verify_email", "reset_password", "invite"]);
+export const authTokenKind = pgEnum("auth_token_kind", ["verify_email", "reset_password", "invite", "change_email"]);
 export const authTokens = pgTable("auth_tokens", {
   id: id(),
   kind: authTokenKind("kind").notNull(),
@@ -130,7 +130,8 @@ export const favourites = pgTable("favourites", {
 }, (t) => [primaryKey({ columns: [t.familyId, t.nannyId] })]);
 
 // ---------- Nannies, vetting & documents ----------
-export const nannyStatusEnum = pgEnum("nanny_status", ["invited", "onboarding", "approved", "suspended", "archived"]);
+/** "invited" is legacy (kept for existing rows). Invitation state lives in nanny_invitations. */
+export const nannyStatusEnum = pgEnum("nanny_status", ["invited", "onboarding", "approved", "suspended", "archived", "draft", "pending_approval"]);
 export const nannies = pgTable("nannies", {
   id: id(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }).unique(),
@@ -151,10 +152,37 @@ export const nannies = pgTable("nannies", {
   hasOwnCar: boolean("has_own_car").notNull().default(false),
   specialistExperience: text("specialist_experience"),
   photoUrl: text("photo_url"),
+  photoKey: text("photo_key"), // private storage key; served via /api/photos/[id] with access checks
+  /** Private contact details used for onboarding — never part of public profile projections. */
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  importSource: text("import_source"), // "website" | "csv" | null (created manually)
+  sourceRef: text("source_ref"),       // stable reference in the source (e.g. website slug)
+  sourceUrl: text("source_url"),
+  importedAt: ts("imported_at"),
+  /** Per-field provenance: { field: { source: "website"|"csv"|"admin"|"nanny", verified: boolean, at, by } } */
+  provenance: jsonb("provenance").notNull().default({}),
+  submittedForReviewAt: ts("submitted_for_review_at"),
   internalNotes: text("internal_notes"),
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: created(), updatedAt: updated(),
-});
+}, (t) => [uniqueIndex("nannies_source_uq").on(t.importSource, t.sourceRef)]);
+
+export const nannyInvitations = pgTable("nanny_invitations", {
+  id: id(),
+  nannyId: uuid("nanny_id").notNull().references(() => nannies.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  status: text("status").notNull().default("sent"), // sent | accepted | revoked (expiry derived from expires_at)
+  expiresAt: ts("expires_at").notNull(),
+  failedAttempts: smallint("failed_attempts").notNull().default(0),
+  sentBy: uuid("sent_by").references(() => users.id),
+  acceptedAt: ts("accepted_at"),
+  acceptedUserId: uuid("accepted_user_id").references(() => users.id),
+  revokedAt: ts("revoked_at"),
+  revokedBy: uuid("revoked_by").references(() => users.id),
+  createdAt: created(),
+}, (t) => [index("nanny_invitations_nanny_idx").on(t.nannyId), uniqueIndex("nanny_invitations_one_open").on(t.nannyId).where(sql`status = 'sent'`)]);
 
 export const qualifications = pgTable("qualifications", {
   id: id(),
@@ -191,6 +219,7 @@ export const documents = pgTable("documents", {
   sizeBytes: integer("size_bytes").notNull(),
   storageKey: text("storage_key").notNull().unique(),
   sha256: text("sha256").notNull(),
+  scanStatus: text("scan_status").notNull().default("not_scanned"), // not_scanned | clean | infected | error
   status: docStatusEnum("status").notNull().default("pending_review"),
   expiresOn: date("expires_on"),
   reviewNote: text("review_note"),
@@ -316,6 +345,11 @@ export const bookings = pgTable("bookings", {
   acceptedQuotationId: uuid("accepted_quotation_id"),
   createdBy: uuid("created_by").references(() => users.id),
   lockVersion: integer("lock_version").notNull().default(0),
+  /** Optional weekday pattern (0=Sun…6=Sat) for recurring multi-day bookings; null = every day in range. */
+  weekdays: smallint("weekdays").array(),
+  /** Nanny's response to an offered booking: pending | accepted | declined (null until a nanny is assigned). */
+  nannyResponse: text("nanny_response"),
+  nannyRespondedAt: ts("nanny_responded_at"),
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: created(), updatedAt: updated(),
 }, (t) => [index("bookings_family_idx").on(t.familyId), index("bookings_nanny_idx").on(t.nannyId), index("bookings_status_idx").on(t.status)]);
@@ -591,6 +625,22 @@ export const integrationConfigs = pgTable("integration_configs", {
   lastError: text("last_error"),
   updatedAt: updated(),
 });
+
+export const tasks = pgTable("tasks", {
+  id: id(),
+  title: text("title").notNull(),
+  notes: text("notes"),
+  status: text("status").notNull().default("open"), // open | done
+  priority: text("priority").notNull().default("normal"), // low | normal | high
+  dueOn: date("due_on"),
+  assigneeId: uuid("assignee_id").references(() => users.id),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  nannyId: uuid("nanny_id").references(() => nannies.id, { onDelete: "set null" }),
+  familyId: uuid("family_id").references(() => families.id, { onDelete: "set null" }),
+  createdBy: uuid("created_by").references(() => users.id),
+  completedAt: ts("completed_at"),
+  createdAt: created(),
+}, (t) => [index("tasks_status_idx").on(t.status, t.dueOn)]);
 
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),

@@ -35,7 +35,7 @@ export default async function Workspace({ params }: { params: Promise<{ id: stri
   return (
     <>
       <PageHeader eyebrow={`${b.reference} · ${b.source}`} title={d.family?.displayName ?? b.enquiryName ?? "Booking"} description={<span className="flex flex-wrap items-center gap-2"><StatusBadge status={b.status} /><span>{d.serviceName}</span>{b.isDemo && <Badge tone="gold">Demo</Badge>}</span>}
-        actions={<>{d.conversation && <Link className="btn-secondary" href={`/messages/${d.conversation.id}`}>Booking chat</Link>}<Link className="btn-ghost" href="/manage/bookings">All bookings</Link></>} />
+        actions={<><Link className="btn-secondary" href={`/manage/tasks?bookingId=${b.id}`}>Add task</Link>{d.conversation && <Link className="btn-secondary" href={`/messages/${d.conversation.id}`}>Booking chat</Link>}<Link className="btn-ghost" href="/manage/bookings">All bookings</Link></>} />
       {next.length > 0 && (
         <ActionForm action={A.transitionAction} className="card mb-6 flex flex-wrap items-end gap-3 p-4">
           {hidden}
@@ -65,7 +65,7 @@ export default async function Workspace({ params }: { params: Promise<{ id: stri
             </Section>
           )}
           <Section title="Matching" action={manage && editable ? <ActionForm action={A.runMatchingAction}>{hidden}<Submit className="btn-secondary btn-sm" pendingText="Matching…">{matches.length ? "Re-run" : "Run matching"}</Submit></ActionForm> : null}>
-            {d.nanny && <p className="mb-4 text-[14px]">Assigned: <Link className="link" href={`/manage/nannies/${d.nanny.id}`}>{d.nanny.displayName}</Link>{b.requestedNannyId === d.nanny.id && " (requested by family)"}</p>}
+            {d.nanny && <p className="mb-4 text-[14px]">Assigned: <Link className="link" href={`/manage/nannies/${d.nanny.id}`}>{d.nanny.displayName}</Link>{b.requestedNannyId === d.nanny.id && " (requested by family)"} {b.nannyResponse && <Badge tone={b.nannyResponse === "accepted" ? "ok" : b.nannyResponse === "declined" ? "bad" : "gold"}>{b.nannyResponse === "pending" ? "Awaiting nanny’s response" : `Nanny ${b.nannyResponse}`}</Badge>}</p>}
             {matches.length ? (
               <ul className="space-y-3">{matches.map(({ m, n }) => {
                 const reasons = m.reasons as Reason[];

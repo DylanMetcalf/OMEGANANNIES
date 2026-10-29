@@ -5,14 +5,15 @@ import { env } from "@/lib/env";
 import { signInAction } from "../actions";
 
 export const metadata = { title: "Sign in" };
-export default async function Login({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
-  const { welcome } = await searchParams;
+export default async function Login({ searchParams }: { searchParams: Promise<{ welcome?: string; verified?: string; closed?: string; "email-changed"?: string }> }) {
+  const sp = await searchParams;
+  const msg = sp.welcome ? "Your account is ready. Please sign in." : sp.verified ? "Email confirmed — your account is active. Please sign in." : sp["email-changed"] ? "Your email address was changed. Sign in with the new address." : sp.closed ? "Your account has been closed." : null;
   return (
     <>
       <p className="eyebrow">Welcome back</p>
-      <h1 className="mt-2 text-[38px]">Sign in to your portal</h1>
+      <h1 className="mt-2 text-[28px]">Sign in to your portal</h1>
       <p className="mt-2 text-muted">Families, nannies and the Omega team all sign in here.</p>
-      {welcome && <div className="mt-6"><Notice tone="ok">Your account is ready. Please sign in.</Notice></div>}
+      {msg && <div className="mt-6"><Notice tone="ok">{msg}</Notice></div>}
       <ActionForm action={signInAction} className="mt-8 space-y-4">
         <div><label className="label" htmlFor="email">Email</label><input id="email" name="email" type="email" autoComplete="email" required className="input" /></div>
         <div>
