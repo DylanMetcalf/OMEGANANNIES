@@ -33,24 +33,22 @@ export default async function Nannies({ searchParams }: { searchParams: Promise<
     <>
       <PageHeader eyebrow="Network" title="Nannies" description="Prepare profiles before nannies have a login, invite them to claim their account, then verify, approve and publish." />
       <nav aria-label="Filter by stage" className="mb-4 flex gap-1 overflow-x-auto rounded-[12px] bg-sand p-1">
-        {FILTERS.map(([k, l]) => <Link key={k} href={`?f=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} aria-current={f === k ? "page" : undefined} className={`whitespace-nowrap rounded-[9px] px-3 py-2 text-[13px] font-medium ${f === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}>{l} <span className="text-subtle">{counts[k]}</span></Link>)}
+        {FILTERS.map(([k, l]) => <Link key={k} href={`?f=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} aria-current={f === k ? "page" : undefined} className={`whitespace-nowrap rounded-[9px] px-3 py-2 text-[13px] font-medium ${f === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}>{l} <span className="text-muted">{counts[k]}</span></Link>)}
       </nav>
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-3">
           <form className="flex max-w-md gap-2" role="search"><input type="hidden" name="f" value={f} /><label htmlFor="q" className="sr-only">Search nannies</label><input id="q" name="q" defaultValue={q} placeholder="Search by name" className="input" /><button className="btn-secondary">Search</button></form>
           {list.length ? (
             <ActionForm action={bulkInviteAction} className="card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="tbl min-w-[760px]">
-                  <thead><tr>{manage && <th className="w-10"><span className="sr-only">Select</span></th>}<th>Nanny</th><th>Stage</th><th>Next step</th><th>Source</th><th className="text-right">Active</th></tr></thead>
+              <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="overflow-x-auto focus-visible:outline-2">
+                <table className="tbl min-w-[620px]">
+                  <thead><tr>{manage && <th className="w-10"><span className="sr-only">Select</span></th>}<th>Nanny</th><th>Stage & next step</th><th className="text-right">Active bookings</th></tr></thead>
                   <tbody>{list.map(({ n, stage, upcoming, changes, pendingDocs }) => (
                     <tr key={n.id}>
                       {manage && <td><input type="checkbox" name="ids" value={n.id} aria-label={`Select ${n.displayName}`} disabled={!!n.userId} className="h-4 w-4 accent-navy" /></td>}
-                      <td><Link href={`/manage/nannies/${n.id}`} className="flex items-center gap-3"><Avatar name={n.displayName} src={n.photoKey ? `/api/photos/${n.id}` : null} size={36} /><span><span className="font-semibold text-ink hover:underline">{n.displayName}</span><span className="block text-[12px] text-muted">{n.contactEmail ?? (n.userId ? "Account claimed" : "No email yet")}</span></span></Link></td>
-                      <td><Badge tone={stage.tone}>{stage.label}</Badge>{(pendingDocs > 0 || changes > 0) && <span className="mt-1 block text-[12px] text-gold-600">{pendingDocs} docs · {changes} changes to review</span>}</td>
-                      <td className="max-w-[280px] text-[13px] text-muted">{stage.next}</td>
-                      <td className="text-[13px] capitalize text-muted">{n.importSource ?? "Manual"}</td>
-                      <td className="text-right">{upcoming}</td>
+                      <td><Link href={`/manage/nannies/${n.id}`} className="flex items-center gap-3"><Avatar name={n.displayName} src={n.photoKey ? `/api/photos/${n.id}` : null} size={36} /><span><span className="font-semibold text-ink hover:underline">{n.displayName}</span><span className="block text-[12px] text-muted">{n.contactEmail ?? (n.userId ? "Account claimed" : "No email yet")} · {n.importSource === "website" ? "From website" : n.importSource === "csv" ? "From CSV" : "Created by Omega"}</span></span></Link></td>
+                      <td><Badge tone={stage.tone}>{stage.label}</Badge><span className="mt-1 block max-w-[360px] text-[13px] text-muted">{stage.next}</span>{(pendingDocs > 0 || changes > 0) && <span className="mt-1 block text-[12px] font-medium text-gold-600">{pendingDocs} documents · {changes} changes to review</span>}</td>
+                      <td className="text-right tabular-nums">{upcoming}</td>
                     </tr>
                   ))}</tbody>
                 </table>

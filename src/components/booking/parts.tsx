@@ -50,7 +50,7 @@ export function BookingFacts({ d, showPreciseLocation }: { d: BookingDetail; sho
 
 export function QuoteTable({ lines, total, deposit, adjustment, adjustmentReason, currency = "ZAR" }: { lines: QuoteLine[]; total: number; deposit: number; adjustment?: number; adjustmentReason?: string | null; currency?: string }) {
   return (
-    <div className="overflow-x-auto">
+    <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="overflow-x-auto focus-visible:outline-2">
       <table className="tbl">
         <thead><tr><th>Item</th><th>Qty</th><th className="text-right">Amount</th></tr></thead>
         <tbody>
@@ -85,7 +85,7 @@ export function Timeline({ events, showInternal }: { events: BookingDetail["even
 
 export function InvoiceRows({ invoices, payments, action }: { invoices: BookingDetail["invoices"]; payments: BookingDetail["payments"]; action?: (inv: BookingDetail["invoices"][number]) => React.ReactNode }) {
   return (
-    <div className="overflow-x-auto">
+    <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="overflow-x-auto focus-visible:outline-2">
       <table className="tbl">
         <thead><tr><th>Invoice</th><th>Type</th><th className="text-right">Amount</th><th>Status</th><th /></tr></thead>
         <tbody>

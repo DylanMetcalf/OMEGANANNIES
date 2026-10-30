@@ -21,7 +21,7 @@ export default async function Compare({ searchParams }: { searchParams: Promise<
   return (
     <>
       <PageHeader eyebrow="Compare" title="Side by side" actions={<Link className="btn-secondary" href="/family/nannies">Back</Link>} />
-      <div className="card overflow-x-auto">
+      <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="card overflow-x-auto focus-visible:outline-2">
         <table className="tbl min-w-[640px]">
           <thead><tr><th className="w-40" />{list.map((n) => <th key={n.id} className="!normal-case"><div className="flex items-center gap-3 py-2"><Avatar name={n.displayName} size={40} /><span className="font-display text-[20px] tracking-normal text-navy">{n.displayName}</span></div></th>)}</tr></thead>
           <tbody>

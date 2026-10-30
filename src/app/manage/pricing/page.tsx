@@ -24,7 +24,7 @@ export default async function Pricing() {
           const draft = b.status === "draft";
           return (
             <Section key={b.id} title={`v${b.version} · ${b.label}`} action={<span className="flex items-center gap-2"><Badge tone={b.status === "published" ? "ok" : draft ? "gold" : "neutral"}>{b.status}</Badge>{b.effectiveFrom && <span className="text-[12px] text-muted">from {fmtDateTime(b.effectiveFrom)}</span>}</span>}>
-              <div className="overflow-x-auto"><table className="tbl min-w-[640px]"><thead><tr><th>Code</th><th>Label</th><th>Audience</th><th>Unit</th><th className="text-right">Amount</th></tr></thead><tbody>
+              <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="overflow-x-auto focus-visible:outline-2"><table className="tbl min-w-[640px]"><thead><tr><th>Code</th><th>Label</th><th>Audience</th><th>Unit</th><th className="text-right">Amount</th></tr></thead><tbody>
                 {its.map((i) => <tr key={i.id}><td className="font-mono text-[12px]">{i.code}</td>
                   <td>{draft ? <ActionForm action={savePriceItemAction} className="flex gap-2"><input type="hidden" name="itemId" value={i.id} /><input name="label" defaultValue={i.label} aria-label="Label" className="input !py-1 text-[13px]" /><input name="amount" defaultValue={edit(i.unit, i.amount)} aria-label="Amount" className="input !w-28 !py-1 text-right text-[13px]" /><Submit className="btn-ghost btn-sm">Save</Submit></ActionForm> : i.label}</td>
                   <td className="capitalize">{i.audience}{i.serviceCode && ` · ${i.serviceCode}`}</td><td>{i.unit}</td><td className="text-right tabular-nums">{show(i.unit, i.amount)}</td></tr>)}

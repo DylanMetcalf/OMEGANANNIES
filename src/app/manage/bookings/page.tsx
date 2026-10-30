@@ -32,7 +32,7 @@ export default async function ManageBookings({ searchParams }: { searchParams: P
         <div className="flex items-end"><button className="btn-primary w-full">Filter</button></div>
       </form>
       {rows.length ? (
-        <div className="card overflow-x-auto">
+        <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="card overflow-x-auto focus-visible:outline-2">
           <table className="tbl min-w-[860px]">
             <thead><tr><th>Reference</th><th>Family</th><th>Service</th><th>Dates</th><th>Nanny</th><th>Status</th><th>Source</th></tr></thead>
             <tbody>{rows.map(({ b, nanny, family }) => (

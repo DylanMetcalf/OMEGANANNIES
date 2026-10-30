@@ -87,7 +87,7 @@ export function DefList({ items }: { items: [string, ReactNode][] }) {
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
       {items.map(([k, v]) => (
-        <div key={k}><dt className="text-[12px] font-medium text-muted">{k}</dt><dd className="mt-0.5 text-[14px] text-ink">{v ?? <span className="text-subtle">—</span>}</dd></div>
+        <div key={k}><dt className="text-[12px] font-medium text-muted">{k}</dt><dd className="mt-0.5 text-[14px] text-ink">{v ?? <span className="text-muted">—</span>}</dd></div>
       ))}
     </dl>
   );

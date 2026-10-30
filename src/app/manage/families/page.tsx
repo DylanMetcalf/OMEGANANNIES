@@ -14,7 +14,7 @@ export default async function Families({ searchParams }: { searchParams: Promise
     <>
       <PageHeader eyebrow="Clients" title="Families" />
       <form className="mb-4 flex max-w-md gap-2" role="search"><label htmlFor="q" className="sr-only">Search</label><input id="q" name="q" defaultValue={q} placeholder="Search households" className="input" /><button className="btn-primary">Search</button></form>
-      {rows.length ? <div className="card overflow-x-auto"><table className="tbl min-w-[640px]"><thead><tr><th>Household</th><th>Primary contact</th><th>Type</th><th>Children</th><th>Bookings</th></tr></thead><tbody>
+      {rows.length ? <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="card overflow-x-auto focus-visible:outline-2"><table className="tbl min-w-[640px]"><thead><tr><th>Household</th><th>Primary contact</th><th>Type</th><th>Children</th><th>Bookings</th></tr></thead><tbody>
         {rows.map(({ f, bookings, children, email }) => <tr key={f.id}><td><Link href={`/manage/families/${f.id}`} className="font-medium link">{f.displayName}</Link>{f.restricted && <Badge tone="bad">Restricted</Badge>}</td><td className="text-muted">{email ?? "Not yet registered"}</td><td className="capitalize">{f.audience}{f.countryOfResidence && <span className="text-muted"> · {f.countryOfResidence}</span>}</td><td>{children}</td><td>{bookings}</td></tr>)}
       </tbody></table></div> : <Empty title="No families found" />}
     </>

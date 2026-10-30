@@ -49,7 +49,7 @@ export default async function NannyRecord({ params }: { params: Promise<{ id: st
       <div className="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
         <div className="space-y-6">
           <Section title="Profile details & provenance" description="Where each detail came from, and whether Omega has verified it.">
-            <div className="overflow-x-auto"><table className="tbl">
+            <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="overflow-x-auto focus-visible:outline-2"><table className="tbl">
               <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
               <tbody>{Object.keys(FIELD_LABEL).map((f) => {
                 const v = f === "photo" ? (n.photoKey ? "Photo on file" : null) : (n as Record<string, unknown>)[f];
@@ -115,7 +115,7 @@ export default async function NannyRecord({ params }: { params: Promise<{ id: st
               <ActionForm action={A.nannyStatusAction} className="mt-4 space-y-3 border-t border-line pt-4" confirm="Apply this status change?">{hidden}
                 <input name="reason" placeholder="Reason (recorded in the audit log)" aria-label="Reason" className="input" />
                 <div className="flex flex-wrap gap-2">
-                  {n.status !== "approved" && <Submit name="status" value="approve" className="btn-primary btn-sm">Approve</Submit>}
+                  {n.userId && ["onboarding", "pending_approval", "draft"].includes(n.status) && <Submit name="status" value="approve" className="btn-primary btn-sm">Approve</Submit>}
                   {n.status === "approved" && !n.published && <Submit name="status" value="publish" className="btn-primary btn-sm">Publish to families</Submit>}
                   {n.published && <Submit name="status" value="unpublish" className="btn-secondary btn-sm">Unpublish</Submit>}
                   {["approved", "pending_approval", "suspended", "archived"].includes(n.status) && <Submit name="status" value="reopen" className="btn-secondary btn-sm">Return to onboarding</Submit>}
@@ -158,7 +158,7 @@ export default async function NannyRecord({ params }: { params: Promise<{ id: st
             <ul className="space-y-1 text-[12px] text-muted">{changes.filter((c) => c.status !== "pending").slice(0, 10).map((c) => <li key={c.id}>{fmtDateTime(c.createdAt)} · {FIELD_LABEL[c.field] ?? c.field} · {c.status}</li>)}</ul>
             {!changes.length && <p className="text-[14px] text-muted">No changes.</p>}
           </Section>
-          <Section title="Availability"><ul className="grid grid-cols-2 gap-1 text-[13px]">{[1, 2, 3, 4, 5, 6, 0].map((w) => { const r = rules.find((x) => x.weekday === w); return <li key={w}>{DAYS[w]}: {r ? `${minutesToHHMM(r.startMinute)}–${minutesToHHMM(r.endMinute)}` : <span className="text-subtle">off</span>}</li>; })}</ul></Section>
+          <Section title="Availability"><ul className="grid grid-cols-2 gap-1 text-[13px]">{[1, 2, 3, 4, 5, 6, 0].map((w) => { const r = rules.find((x) => x.weekday === w); return <li key={w}>{DAYS[w]}: {r ? `${minutesToHHMM(r.startMinute)}–${minutesToHHMM(r.endMinute)}` : <span className="text-muted">off</span>}</li>; })}</ul></Section>
           <Section title="Booking history">{bookings.length ? <ul className="space-y-2 text-[14px]">{bookings.map((b) => <li key={b.id} className="flex justify-between gap-2"><Link className="link" href={`/manage/bookings/${b.id}`}>{dates(b)}</Link><StatusBadge status={b.status} /></li>)}</ul> : <p className="text-[14px] text-muted">No bookings.</p>}</Section>
         </div>
       </div>

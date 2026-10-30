@@ -24,12 +24,12 @@ export default async function Payments() {
       <div className="mb-6 grid grid-cols-2 gap-3 sm:max-w-md"><div className="card p-4"><p className="text-[12px] uppercase tracking-wider text-muted">Outstanding</p><p className="font-display text-[30px] text-navy">{formatMoney(outstanding)}</p></div><div className="card p-4"><p className="text-[12px] uppercase tracking-wider text-muted">Paid to date</p><p className="font-display text-[30px] text-navy">{formatMoney(paid)}</p></div></div>
       <div className="space-y-6">
         <Section title="Invoices">
-          {inv.length ? <div className="overflow-x-auto"><table className="tbl"><thead><tr><th>Invoice</th><th>Booking</th><th>Type</th><th className="text-right">Amount</th><th>Status</th></tr></thead><tbody>
+          {inv.length ? <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="overflow-x-auto focus-visible:outline-2"><table className="tbl"><thead><tr><th>Invoice</th><th>Booking</th><th>Type</th><th className="text-right">Amount</th><th>Status</th></tr></thead><tbody>
             {inv.map(({ i, ref, bid }) => <tr key={i.id}><td className="font-mono text-[13px]">{i.number}</td><td><Link className="link" href={`/family/bookings/${bid}`}>{ref}</Link></td><td className="capitalize">{i.kind}</td><td className="text-right tabular-nums">{formatMoney(i.amountMinor, i.currency)}</td><td className={i.status === "paid" ? "text-ok" : "text-warn"}>{i.status === "paid" ? "Paid" : "Due"}</td></tr>)}
           </tbody></table></div> : <Empty title="No invoices yet">Invoices appear once you accept a quotation.</Empty>}
         </Section>
         <Section title="Payment history & receipts">
-          {pays.length ? <div className="overflow-x-auto"><table className="tbl"><thead><tr><th>Date</th><th>Method</th><th className="text-right">Amount</th><th>Status</th><th>Receipt</th></tr></thead><tbody>
+          {pays.length ? <div tabIndex={0} role="region" aria-label="Table — scroll sideways to see more" className="overflow-x-auto focus-visible:outline-2"><table className="tbl"><thead><tr><th>Date</th><th>Method</th><th className="text-right">Amount</th><th>Status</th><th>Receipt</th></tr></thead><tbody>
             {pays.map((p) => <tr key={p.id}><td>{fmtDateTime(p.createdAt)}</td><td className="capitalize">{p.provider === "manual" ? "EFT" : p.provider}</td><td className="text-right tabular-nums">{formatMoney(p.amountMinor, p.currency)}</td><td className="capitalize">{p.status}{refunds.some((r) => r.paymentId === p.id) && <span className="block text-[12px] text-muted">Refund {refunds.find((r) => r.paymentId === p.id)!.status}</span>}</td><td>{p.status === "succeeded" ? <a className="link" href={`/api/receipts/${p.id}`}>Receipt</a> : "—"}</td></tr>)}
           </tbody></table></div> : <p className="text-[14px] text-muted">No payments yet.</p>}
         </Section>

@@ -22,7 +22,7 @@ export function PortalShell({ portal, nav, user, children, unread = 0 }: { porta
       <aside className="sticky top-0 hidden h-screen flex-col border-r border-line bg-surface lg:flex">
         <div className="px-6 pb-5 pt-6">
           <Link href="/" aria-label="Omega Nannies home"><Image src="/omega-logo.png" alt="Omega Nannies" width={148} height={50} priority /></Link>
-          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.14em] text-subtle">{portal}</p>
+          <p className="mt-4 text-[12px] font-semibold uppercase tracking-[0.14em] text-muted">{portal}</p>
         </div>
         <div className="flex-1 overflow-y-auto pb-4"><NavLinks nav={nav} /></div>
         <div className="flex items-center gap-3 border-t border-line p-4">

@@ -6,7 +6,7 @@ Five progressive audit-and-improvement cycles. Each finding records evidence, ro
 |---|---|---|---|---|
 | 1 | Baseline functionality & integrity | 14 | 14 | 0 |
 | 2 | Security, privacy & data integrity | 12 | 11 | 1 (documented) |
-| 3 | Design, UI/UX & accessibility | see §3 | | |
+| 3 | Design, UI/UX & accessibility | 9 | 9 | 0 |
 | 4 | End-to-end operations & edge cases | see §4 | | |
 | 5 | Independent production-readiness review | see §5 | | |
 
@@ -53,3 +53,22 @@ Five progressive audit-and-improvement cycles. Each finding records evidence, ro
 | A2-12 | Medium | Uploads | No malware scanning available in this environment | No ClamAV service | `scanBuffer` hook (clamd INSTREAM via `CLAMAV_HOST`); files marked “Not virus-scanned” in the UI; infected files rejected and cannot be approved | Code review | **Open — needs ClamAV in production** |
 
 Previously verified and re-run: forged/replayed PayFast notices, amount tampering, client-supplied status changes, role escalation (integration + E2E).
+
+## 3. Audit 3 — Design, UI, UX and accessibility
+
+**Method:** axe-core (WCAG 2.0/2.1/2.2 A+AA tags) on 33 pages across all roles at desktop and Pixel 7 sizes; keyboard-only journey; screenshot review at 1440, 820 and 390 px; review of typography, hierarchy, density and feedback patterns.
+**Evidence:** `tests/e2e/a11y.spec.ts` → 9/9 passing with zero serious/critical violations; screenshots in `docs/screenshots/`.
+
+| ID | Sev | Module | Evidence | Root cause | Remediation | Test | Result |
+|---|---|---|---|---|---|---|---|
+| A3-01 | Serious (WCAG 1.4.3) | Design tokens | axe: 3.2:1 contrast on portal label, filter counts, day-off labels (36 pages) | `subtle` grey used for small text | Text uses `muted` (≥4.5:1); `subtle` reserved for icons/placeholders; token documented | a11y spec | Fixed |
+| A3-02 | Serious (WCAG 2.1.1) | Tables | axe `scrollable-region-focusable` on phones | Horizontally scrolling table wrappers not focusable | All table scroll regions `tabIndex=0`, `role=region`, labelled | a11y spec (mobile) | Fixed |
+| A3-03 | Medium | Management › Nannies | Screenshot 1440 px: side panels clipped, “Next step” one word per line | `1fr` grid track grew to the table’s min-content; 6 columns | `minmax(0,1fr)`; stage + next step merged; source moved under name | Visual | Fixed |
+| A3-04 | Medium | Typography | Old serif display face read as decorative; “1” looked like “I” | Website typography reused in a data-dense app | Manrope (display) + Inter (UI), self-hosted via next/font, lining tabular numerals, documented scale | Visual | Fixed |
+| A3-05 | Medium | Navigation (mobile) | Desktop sidebar squeezed into a drawer only | No phone-first navigation | Bottom tab bar (4 primary + More), native `<dialog>` drawer with focus handling | E2E `@mobile` | Fixed |
+| A3-06 | Low | Nanny record | “Approve” offered on unclaimed drafts (always failed) | Button ignored onboarding state | Shown only once the profile is claimed and in onboarding/review | E2E approval | Fixed |
+| A3-07 | Low | Feedback | No loading indication on navigation after removing the root loading boundary (Cycle 0) | — | Per-link pending indicator (`useLinkStatus`), form `aria-busy`, pending button labels | Visual | Fixed |
+| A3-08 | Low | Status | Colour-only status in places | — | Badges carry a dot + text; notices have role/status semantics | a11y spec | Fixed |
+| A3-09 | Info | Motion | Entrance fade could skew automated contrast checks | — | Fade is 160 ms and disabled under `prefers-reduced-motion`; tests wait for it | a11y spec | Noted |
+
+Keyboard-only sign-in, skip link and visible focus are covered by an automated test. Screen-reader testing with NVDA/VoiceOver was not possible in this environment and remains a recommended manual check.
