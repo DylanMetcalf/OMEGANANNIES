@@ -430,21 +430,22 @@ export async function userStatusAction(_: ActionResult, fd: FormData) {
 }
 export async function startMfaAction(_: ActionResult, _fd: FormData) {
   return run(async () => {
-    const u = await assertUser({ role: "management" });
+    const u = await assertUser({ role: "management", allowWithoutMfa: true });
     const secret = newTotpSecret();
     await db.update(s.users).set({ mfaSecret: secret, mfaEnabled: false }).where(eq(s.users.id, u.id));
-    return { ok: `Add this key to your authenticator app: ${secret} — or otpauth://totp/Omega%20Nannies:${encodeURIComponent(u.email)}?secret=${secret}&issuer=Omega%20Nannies — then enter a code below.` };
+    return { ok: `Add this key to your authenticator app: ${secret} — or use otpauth://totp/Omega%20Nannies:${encodeURIComponent(u.email)}?secret=${secret}&issuer=Omega%20Nannies — then enter a code below.` };
   });
 }
 export async function confirmMfaAction(_: ActionResult, fd: FormData) {
   return run(async () => {
-    const u = await assertUser({ role: "management" });
+    const u = await assertUser({ role: "management", allowWithoutMfa: true });
     const [row] = await db.select().from(s.users).where(eq(s.users.id, u.id));
     if (!row.mfaSecret || !verifyTotp(row.mfaSecret, str(fd, "code"))) throw new DomainError("Code didn't match.");
     await db.update(s.users).set({ mfaEnabled: true }).where(eq(s.users.id, u.id));
     await db.update(s.sessions).set({ mfaPassed: true }).where(eq(s.sessions.id, u.sessionId));
     await audit(u.id, "auth.mfa_enabled", "user", u.id);
-    return done("/manage/admin", "Two-step verification enabled.");
+    revalidatePath("/", "layout");
+    return { ok: "Two-step verification enabled." };
   });
 }
 export async function retentionAction(_: ActionResult, fd: FormData) {

@@ -16,7 +16,9 @@ export async function run(fn: () => Promise<ActionResult | void>): Promise<Actio
     if (e && typeof e === "object" && "digest" in e && String((e as { digest: string }).digest).startsWith("NEXT_")) throw e; // redirect/notFound
     if (e instanceof z.ZodError) return { error: e.issues.map((i) => i.message).join(" ") };
     if (e instanceof DomainError || e instanceof AuthError) return { error: e.message };
-    console.error("[action]", e);
+    // Log only non-sensitive metadata: database errors can carry submitted values (emails, names) in their detail.
+    const err = e as { name?: string; code?: string; message?: string; cause?: { code?: string } };
+    console.error("[action]", { name: err?.name, code: err?.code ?? err?.cause?.code, message: String(err?.message ?? "").slice(0, 120).replace(/\S+@\S+/g, "[email]") });
     return { error: "Something went wrong. Please try again — if it persists, contact Omega Nannies." };
   }
 }

@@ -8,6 +8,8 @@ export const env = {
     return s;
   },
   demo: flag(process.env.DEMO_MODE),
+  /** Staff must enrol in two-step verification before using the management portal (default on outside demo). */
+  requireStaffMfa: process.env.REQUIRE_STAFF_MFA ? flag(process.env.REQUIRE_STAFF_MFA) : !flag(process.env.DEMO_MODE),
   storageDriver: (process.env.STORAGE_DRIVER ?? "local") as "local" | "supabase",
   resendKey: process.env.RESEND_API_KEY || "",
   emailFrom: process.env.EMAIL_FROM ?? "Omega Nannies <bookings@omeganannies.com>",

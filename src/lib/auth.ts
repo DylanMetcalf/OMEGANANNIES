@@ -6,6 +6,7 @@ import { and, eq, gt } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { randomToken, sha256 } from "./crypto";
 import { can, isManagement, type Permission, type Principal, type Role } from "./permissions";
+import { env } from "./env";
 
 const COOKIE = "omega_session";
 const MGMT_TTL_H = 12, USER_TTL_H = 24 * 7;
@@ -46,10 +47,11 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 });
 
 /** Server-side gate for pages and actions. Never rely on hidden UI for access control. */
-export async function requireUser(opts: { role?: Role | "management"; perm?: Permission } = {}): Promise<CurrentUser> {
+export async function requireUser(opts: { role?: Role | "management"; perm?: Permission; allowWithoutMfa?: boolean } = {}): Promise<CurrentUser> {
   const u = await getCurrentUser();
   if (!u) redirect("/login");
   if (isManagement(u) && u.mfaEnabled && !u.mfaPassed) redirect("/mfa");
+  if (isManagement(u) && !u.mfaEnabled && env.requireStaffMfa && !opts.allowWithoutMfa) redirect("/mfa-setup");
   if (opts.role === "management" ? !isManagement(u) : opts.role && !u.roles.includes(opts.role)) redirect("/forbidden");
   if (opts.perm && !can(u, opts.perm)) redirect("/forbidden");
   return u;
@@ -57,10 +59,11 @@ export async function requireUser(opts: { role?: Role | "management"; perm?: Per
 
 /** For server actions / route handlers: throw instead of redirect. */
 export class AuthError extends Error { status = 403; }
-export async function assertUser(opts: { role?: Role | "management"; perm?: Permission } = {}): Promise<CurrentUser> {
+export async function assertUser(opts: { role?: Role | "management"; perm?: Permission; allowWithoutMfa?: boolean } = {}): Promise<CurrentUser> {
   const u = await getCurrentUser();
   if (!u) throw new AuthError("Not signed in");
   if (isManagement(u) && u.mfaEnabled && !u.mfaPassed) throw new AuthError("MFA required");
+  if (isManagement(u) && !u.mfaEnabled && env.requireStaffMfa && !opts.allowWithoutMfa) throw new AuthError("Set up two-step verification first.");
   if (opts.role === "management" ? !isManagement(u) : opts.role && !u.roles.includes(opts.role)) throw new AuthError("Not permitted");
   if (opts.perm && !can(u, opts.perm)) throw new AuthError("Not permitted");
   return u;

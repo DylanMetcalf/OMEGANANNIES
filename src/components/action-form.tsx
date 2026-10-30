@@ -36,7 +36,7 @@ export function ActionForm({ action, children, className, resetOnSuccess, confir
       <Pending.Provider value={isPending}>{children}</Pending.Provider>
       <div aria-live="polite" className="empty:hidden">
         {state?.error && <p role="alert" className="mt-3 rounded-[10px] bg-bad-50 px-3 py-2 text-[13px] font-medium text-bad">{state.error}</p>}
-        {state?.ok && /\s\/[a-z-]+\?token=/.test(state.ok) && <p className="mt-3 break-all rounded-[10px] bg-ok-50 px-3 py-2 text-[13px] font-medium text-ok">{state.ok}</p>}
+        {state?.ok && /\s\/[a-z-]+\?token=|otpauth:\/\//.test(state.ok) && <p className="mt-3 break-all rounded-[10px] bg-ok-50 px-3 py-2 text-[13px] font-medium text-ok">{state.ok}</p>}
       </div>
     </form>
   );
