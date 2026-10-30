@@ -127,10 +127,16 @@ export async function syncBooking(bookingId: string): Promise<{ written: number;
       await withToken(c, async (t) => {
         const links = await db.select().from(s.calendarEventLinks).where(and(eq(s.calendarEventLinks.connectionId, c.id), eq(s.calendarEventLinks.bookingId, b.id)));
         for (const x of sessions) {
-          const l = links.find((k) => k.sessionStart?.getTime() === x.startsAt.getTime());
+          let l = links.find((k) => k.sessionStart?.getTime() === x.startsAt.getTime());
           const h = hashOf(x.startsAt, x.endsAt, summary);
           if (l && l.status === "synced" && l.contentHash === h) continue; // already correct — no duplicate write
           if (l?.status === "conflict") continue; // waiting for management's decision
+          if (!l) {
+            // Claim the session before creating the external event, so two concurrent syncs can't both create it.
+            const [claim] = await db.insert(s.calendarEventLinks).values({ connectionId: c.id, bookingId: b.id, sessionStart: x.startsAt, status: "pending" }).onConflictDoNothing().returning();
+            if (!claim) continue; // another sync is creating it right now
+            l = claim;
+          } else if (l.status === "pending" && !l.providerEventId && l.updatedAt.getTime() > Date.now() - 120_000) continue; // in flight elsewhere
           const r = await provider(c.provider as ProviderId).upsertEvent(t, c.calendarId, { summary, description, start: x.startsAt, end: x.endsAt, omegaKey: `${b.id}:${x.startsAt.toISOString()}` }, l?.providerEventId);
           await db.insert(s.calendarEventLinks).values({ connectionId: c.id, bookingId: b.id, sessionStart: x.startsAt, providerEventId: r.id, etag: r.etag, contentHash: h, status: "synced" })
             .onConflictDoUpdate({ target: [s.calendarEventLinks.connectionId, s.calendarEventLinks.bookingId, s.calendarEventLinks.sessionStart], set: { providerEventId: r.id, etag: r.etag ?? null, contentHash: h, status: "synced", lastError: null, updatedAt: new Date() } });

@@ -46,7 +46,7 @@ export default async function Review({ searchParams }: { searchParams: Promise<{
           locations={locs.map((l) => ({ id: l.id, label: `${l.label} · ${l.area}` }))} hasKids={kids.length > 0} />
         <aside className="space-y-5 lg:sticky lg:top-20 lg:self-start">
           <Section title="Your request">
-            <dl className="space-y-3 text-[14px]">{rows.map(([k, v, h]) => <div key={k} className="flex items-start justify-between gap-3"><div><dt className="text-[12px] text-muted">{k}</dt><dd className="mt-0.5">{v}</dd></div><Link href={h} className="text-[12px] link" aria-label={`Edit ${k}`}>Edit</Link></div>)}</dl>
+            <dl className="space-y-3 text-[14px]">{rows.map(([k, v, h]) => <div key={k}><dt className="text-[12px] text-muted">{k}</dt><dd className="mt-0.5 flex items-start justify-between gap-3"><span>{v}</span><Link href={h} className="shrink-0 text-[12px] link" aria-label={`Edit ${k}`}>Edit</Link></dd></div>)}</dl>
           </Section>
           <Section title="Estimated price">
             {est && !("error" in est) ? (

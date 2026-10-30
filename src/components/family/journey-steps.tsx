@@ -12,7 +12,7 @@ export function JourneySteps({ current, query = "" }: { current: 0 | 1 | 2; quer
           const body = (
             <span className={`flex items-center gap-2 rounded-full px-1 py-1 pr-3 text-[13px] font-medium transition-colors ${on ? "text-ink" : done ? "text-navy hover:bg-navy-50" : "text-muted"}`}>
               <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold ${done ? "bg-ok text-white" : on ? "bg-navy text-white" : "bg-sand text-muted"}`}>{done ? <Check aria-hidden className="h-4 w-4" /> : i + 1}</span>
-              <span className={on ? "" : "hidden sm:inline"}>{label}</span>
+              <span className={on ? "" : "sr-only sm:not-sr-only"}>{label}</span>
             </span>
           );
           return (

@@ -77,7 +77,7 @@ export async function RoleShell({ user, children }: { user: CurrentUser; childre
       { prefix: "/family/book/nannies", href: "/family/shortlist", label: "Shortlist", icon: "bookmark", count: shortlisted },
       { prefix: "/family/shortlist", href: "/family/book/review", label: "Continue", icon: "arrow" },
       { prefix: "/family/book/review", href: "", label: "", icon: "" },
-      { prefix: "/family/book", href: "/family/book/nannies", label: "Find a nanny", icon: "search", exact: true },
+      { prefix: "/family/book", href: "", label: "", icon: "", exact: true }, // step 1 has its own sticky action bar
     ];
   }
   const greeting = primary.label.startsWith("Continue") ? "Your booking is where you left it." : isManagement(user) ? "Here's today's operations overview." : user.roles.includes("nanny") ? "Here's your day at a glance." : "Let's find the right nanny for your family.";

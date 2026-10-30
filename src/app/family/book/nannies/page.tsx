@@ -73,6 +73,7 @@ export default async function Discover({ searchParams }: { searchParams: Promise
       <JourneySteps current={1} />
       <PageHeader eyebrow="Choose nannies" title={hasReq ? "Nannies who fit your needs" : "Our nannies"} description={hasReq ? <span className="flex flex-wrap items-center gap-x-2 gap-y-1">{summary.map((x, i) => <span key={i} className="after:ml-2 after:text-line after:content-['·'] last:after:content-none">{x}</span>)}<Link href="/family/book" className="link text-[14px]">Edit</Link></span> : <>Tell us your dates to see who is free. <Link className="link" href="/family/book">Add your needs</Link></>} />
 
+      {sp.gone && <p role="status" className="mb-4 rounded-[12px] bg-warn-50 px-4 py-3 text-[14px] text-warn">That nanny&rsquo;s profile is no longer available. Please choose another, or ask Omega to suggest someone.</p>}
       <Form action="/family/book/nannies" scroll={false} className="card mb-4 p-3 sm:p-4" role="search" aria-label="Search and filter nannies">
         {hidden.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
         <div className="flex flex-col gap-2 sm:flex-row">

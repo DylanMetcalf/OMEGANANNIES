@@ -24,7 +24,7 @@ test("a signed document link is bound to the user it was issued to", async ({ pa
   test.skip(!doc, "no nanny documents in the demo database yet (run journeys first)");
   await login(page, "admin.demo@example.com");
   await page.goto(`/manage/nannies/${doc.owner_nanny_id}`);
-  const href = await page.getByRole("link", { name: "Open" }).first().getAttribute("href");
+  const href = await page.getByRole("link", { name: "Open", exact: true }).first().getAttribute("href");
   expect(href).toMatch(/\/api\/documents\/.+\?exp=\d+&sig=/);
   expect((await page.request.get(href!)).status()).toBe(200);
   const other = await (await browser.newContext()).newPage();
@@ -92,4 +92,31 @@ test("an expired or revoked session cannot read pages or run actions", async ({ 
   await expect(page.getByRole("alert").filter({ hasText: "Not signed in" })).toBeVisible();
   await page.goto("/family");
   await expect(page).toHaveURL(/\/login/);
+});
+
+test("cross-domain entry points only redirect inside the portal", async ({ page, request }) => {
+  const anon = await request.get("/start?intent=book&service=holiday-nanny", { maxRedirects: 0 });
+  expect(anon.headers().location).toMatch(/\/login\?next=%2Ffamily%2Fbook%3Fservice%3Dholiday$/);
+  const evil = await request.get("/start?intent=https://evil.example", { maxRedirects: 0 });
+  expect(new URL(evil.headers().location!, "http://x").pathname).toBe("/login");
+  await page.goto("/login?next=//evil.example/family");
+  await page.waitForFunction(() => document.documentElement.dataset.hydrated === "1");
+  await page.getByLabel("Email").fill("family.demo@example.com");
+  await page.getByLabel("Password", { exact: true }).fill(PW);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(/localhost:3000\/family/);
+  expect(new URL(page.url()).host).toBe("localhost:3000");
+});
+
+test("unsigned webhooks and unauthorised exports are refused", async ({ page, request }) => {
+  expect((await request.post("/api/calendar/webhook/google", { headers: { "x-goog-channel-id": "x", "x-goog-channel-token": "y" } })).status()).toBe(401);
+  expect((await request.post("/api/calendar/webhook/microsoft", { data: { value: [{ subscriptionId: "x", clientState: "y" }] } })).status()).toBe(401);
+  expect((await request.post("/api/notifications/twilio", { form: { MessageSid: "SM1", MessageStatus: "delivered" } })).status()).toBe(401);
+  expect((await request.post("/api/notifications/resend", { data: { type: "email.delivered", data: { email_id: "x" } } })).status()).toBe(401);
+  await login(page, "family.demo@example.com");
+  for (const p of ["/api/reports/insights", "/api/reports/growth", "/api/reports/export"]) expect((await page.request.get(p)).status()).toBe(404);
+  await page.goto("/manage/insights");
+  await expect(page).toHaveURL(/\/forbidden/);
+  const cal = await page.request.get("/api/calendar/connect/google", { maxRedirects: 0 });
+  expect(cal.headers().location).toMatch(/\/account\?calendar=unavailable/); // no OAuth client configured: never a half-built flow
 });

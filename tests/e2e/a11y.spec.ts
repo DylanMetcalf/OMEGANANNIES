@@ -5,9 +5,9 @@ import { resetLoginLimits } from "./limits";
 /** Audit 3 — automated WCAG 2.2 AA checks (axe-core) across every role. Fails on serious/critical issues. */
 const PAGES: Record<string, string[]> = {
   "-": ["/", "/login", "/register", "/forgot-password", "/help", "/claim?token=x"],
-  "family.demo@example.com": ["/family", "/family/nannies", "/family/bookings", "/family/bookings/new", "/family/children", "/family/payments", "/family/documents", "/family/profile", "/account", "/notifications", "/messages"],
+  "family.demo@example.com": ["/family", "/family/book", "/family/book/nannies?service=holiday&start=2026-12-20&area=Atlantic+Seaboard", "/family/book/nannies?service=holiday&start=2026-12-20&area=Atlantic+Seaboard&preview=amahle-n", "/family/book/review", "/family/shortlist", "/family/nannies/amahle-n", "/family/bookings", "/family/my-family", "/family/my-family?tab=children", "/family/payments", "/family/documents", "/account", "/notifications", "/messages"],
   "nanny.demo@example.com": ["/nanny", "/nanny/bookings", "/nanny/availability", "/nanny/profile", "/nanny/documents", "/nanny/onboarding"],
-  "admin.demo@example.com": ["/manage", "/manage/bookings", "/manage/nannies", "/manage/families", "/manage/tasks", "/manage/pricing", "/manage/reports", "/manage/content", "/manage/support", "/manage/admin"],
+  "admin.demo@example.com": ["/manage", "/manage/bookings", "/manage/nannies", "/manage/families", "/manage/tasks", "/manage/pricing", "/manage/reports", "/manage/content", "/manage/support", "/manage/admin", "/manage/insights", "/manage/growth"],
 };
 test.beforeEach(resetLoginLimits);
 async function login(page: Page, email: string) {

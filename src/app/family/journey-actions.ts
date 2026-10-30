@@ -71,7 +71,7 @@ export async function selectNannyAction(fd: FormData) {
   const { u, familyId } = await familyUser();
   const nannyId = str(fd, "nannyId");
   const [n] = await db.select({ id: s.nannies.id }).from(s.nannies).where(and(eq(s.nannies.id, nannyId), eq(s.nannies.status, "approved"), eq(s.nannies.published, true)));
-  if (!n) throw new DomainError("This profile is no longer available.");
+  if (!n) redirect("/family/book/nannies?gone=1"); // unpublished since it was viewed: back to results with a note
   await db.insert(s.favourites).values({ familyId, nannyId }).onConflictDoNothing();
   const d = await getDraft(familyId);
   await saveDraft(familyId, u.id, { prefs: [nannyId, ...d.prefs.filter((p) => p !== nannyId)].slice(0, 3), assistance: false, step: "review" });

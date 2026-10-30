@@ -37,9 +37,9 @@ test.describe.serial("family → management → payment → nanny", () => {
     await expect(page).toHaveURL(/\/family$/);
   });
 
-  test("family adds a child and location, then requests Amahle", async ({ page }) => {
+  test("family completes My Family, then books through the guided journey (discover → preview → shortlist → compare → select → review)", async ({ page }) => {
     await login(page, famEmail);
-    await go(page, "/family/children");
+    await go(page, "/family/my-family?tab=children");
     const add = page.locator("section", { hasText: "Add a child" });
     await add.getByLabel("Preferred name").fill("Mia");
     await add.getByLabel("Date of birth").fill("2021-06-01");
@@ -47,34 +47,72 @@ test.describe.serial("family → management → payment → nanny", () => {
     await add.getByRole("checkbox").check();
     await add.getByRole("button", { name: "Add child" }).click();
     await expect(page.getByRole("heading", { name: /Mia/ })).toBeVisible();
-    await go(page, "/family/profile");
+    await go(page, "/family/my-family?tab=addresses");
     await page.getByLabel("Label", { exact: true }).fill("Villa");
     await page.getByLabel("Area", { exact: true }).selectOption("Atlantic Seaboard");
     await page.getByLabel("Address", { exact: true }).fill("1 Test Road");
-    await page.getByRole("button", { name: "Add location" }).click();
-    await expect(page.getByText("Location added.")).toBeVisible();
+    await page.getByRole("button", { name: "Add address" }).click();
+    await expect(page.getByText("1 Test Road")).toBeVisible();
 
-    await go(page, "/family/nannies?q=Amahle");
-    await page.getByRole("link", { name: "View profile" }).first().click();
-    await page.getByRole("link", { name: /Request Amahle/ }).click();
-    await hydrated(page);
+    // Step 1 — requirements (validation first: nothing chosen)
+    await go(page, "/family/book");
+    await page.getByRole("button", { name: "Show matching nannies" }).click();
+    await expect(page.getByText("Choose the type of care you need.")).toBeVisible();
+    await page.getByText("Holiday Nanny", { exact: true }).click();
     // Unique future date per run so repeated runs never collide with earlier E2E bookings for the same nanny.
     const d = new Date(Date.now() + (150 + (parseInt(stamp, 36) % 600)) * 86400_000).toISOString().slice(0, 10);
-    await page.getByLabel("Start date").fill(d);
-    await page.getByLabel("Daily start").fill("09:00");
-    await page.getByLabel("Daily finish").fill("17:00");
+    await page.getByLabel("Date", { exact: true }).fill(d);
+    await page.getByLabel("Area", { exact: true }).selectOption("Atlantic Seaboard");
+    await page.getByRole("button", { name: "Show matching nannies" }).click();
+
+    // Step 2 — discovery grid, search, preview drawer, shortlist
+    await page.waitForURL(/\/family\/book\/nannies\?/); await hydrated(page);
+    await expect(page.getByRole("heading", { name: "Nannies who fit your needs" })).toBeVisible();
+    await page.getByRole("button", { name: "Add Charlotte B. to shortlist" }).click();
+    await expect(page.getByRole("button", { name: "Remove Charlotte B. from shortlist" })).toBeVisible();
+    await page.getByLabel("Search by name, skill or interest").fill("Amahle");
+    await page.getByRole("button", { name: "Apply" }).click();
+    await page.waitForURL(/q=Amahle/);
+    await expect(page.getByRole("link", { name: "Preview Charlotte B." }).first()).toHaveCount(0);
+    await page.getByRole("link", { name: "Preview Amahle N." }).click();
+    const drawer = page.getByRole("dialog", { name: /Profile preview: Amahle N\./ });
+    await expect(drawer.getByText("Free on your dates")).toBeVisible();
+    await drawer.getByRole("button", { name: "Add to shortlist" }).click();
+    await expect(drawer.getByRole("button", { name: "Shortlisted" })).toBeVisible();
+    await drawer.getByRole("button", { name: /Close preview/ }).click();
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByLabel("Search by name, skill or interest")).toHaveValue("Amahle"); // filters kept
+
+    // Shortlist → compare side by side → select
+    await go(page, "/family/shortlist");
+    for (const n of ["Amahle N.", "Charlotte B."]) await page.locator("div.relative", { hasText: n }).getByRole("checkbox", { name: "Compare" }).check();
+    await page.getByRole("button", { name: "Compare selected" }).click();
+    await expect(page.getByRole("heading", { name: "Side by side" })).toBeVisible();
+    await expect(page.getByRole("rowheader", { name: "Availability" })).toBeVisible();
+    await page.getByRole("button", { name: "Select Amahle" }).click();
+
+    // Steps 3–5 — preferences, review, send
+    await page.waitForURL(/\/family\/book\/review/); await hydrated(page);
+    await expect(page.getByRole("button", { name: /Amahle N\..*1st choice/ })).toBeVisible();
+    await page.getByRole("button", { name: /Charlotte B\..*Choose/ }).click();
+    await expect(page.getByText(/Your order: 1\. Amahle N\.\s+·\s+2\. Charlotte B\./)).toBeVisible();
     await page.getByLabel(/I understand this is a/).check();
     await page.getByRole("button", { name: "Send booking request" }).click();
-    await expect(page.getByText("Request received")).toBeVisible();
+    await expect(page.getByText(/Request received — reference ON-/)).toBeVisible();
     bookingUrl = page.url().split("?")[0];
-    await expect(page.getByText("Enquiry received").first()).toBeVisible();
+    await expect(page.getByText("Nanny preferences submitted")).toBeVisible();
+    await expect(page.getByText(/What happens next:/)).toBeVisible();
+    await go(page, "/family");
+    await expect(page.getByText("Requests in progress")).toBeVisible();
   });
 
   test("manager matches and offers the booking to Amahle", async ({ page }) => {
     await login(page, "manager.demo@example.com");
     await go(page, bookingUrl.replace("/family/", "/manage/"));
+    await expect(page.getByText(/Family preferences: 1\. Amahle N\. · 2\. Charlotte B\./)).toBeVisible();
     await page.getByRole("button", { name: "Run matching" }).click();
     await expect(page.getByText(/eligible of/)).toBeVisible();
+    await expect(page.getByText("Family's 1st preference").first()).toBeVisible();
     const row = page.locator("li", { hasText: "Amahle N." }).filter({ has: page.getByRole("button", { name: "Assign", exact: true }) });
     await row.getByRole("button", { name: "Assign", exact: true }).click();
     await expect(page.getByText("Awaiting nanny’s response")).toBeVisible();
@@ -138,6 +176,25 @@ test("role boundaries are enforced server-side", async ({ page, request }) => {
   expect(forged.status()).toBe(400);
   const site = await request.post("/api/enquiries", { data: { enquiryId: "x" }, headers: { "x-omega-signature": "nope" } });
   expect([401, 503]).toContain(site.status());
+});
+
+test("@mobile the bottom-centre primary action starts booking and the shortlist works by touch", async ({ page }) => {
+  await login(page, "family2.demo@example.com");
+  await hydrated(page);
+  const fab = page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: /Book a nanny|Continue booking/ });
+  await expect(fab).toBeVisible();
+  const box = (await fab.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await fab.click();
+  await page.waitForURL(/\/family\/book/);
+  await go(page, "/family/book/nannies");
+  const bm = page.getByRole("button", { name: /^(Add|Remove) .* (to|from) shortlist$/ }).first();
+  const before = await bm.getAttribute("aria-pressed");
+  await bm.tap();
+  await expect(bm).toHaveAttribute("aria-pressed", before === "true" ? "false" : "true");
+  await bm.tap(); // restore
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
 });
 
 test("@mobile family home and navigation work on a phone", async ({ page }) => {

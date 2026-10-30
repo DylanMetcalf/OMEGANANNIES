@@ -114,13 +114,13 @@ export function BottomTabs({ nav, primary, accent }: { nav: NavItem[]; primary?:
       {tabs.slice(0, 2).map(tab)}
       <div className="flex justify-center">
         {action ? (
-          <Link href={action.href} prefetch={false} aria-label={count !== undefined ? `${action.label}, ${count} saved` : action.label}
+          <Link href={action.href} prefetch={false}
             className="group relative -mt-5 mb-1 flex flex-col items-center gap-1 text-[11px] font-semibold text-ink">
             <span className={`relative inline-flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_8px_20px_-6px_rgb(23_32_56/0.45)] ring-4 ring-surface transition-transform group-active:scale-95 ${accent ? "bg-cta" : "bg-navy"}`}>
               <Icon name={action.icon} className="h-6 w-6" />
-              {count !== undefined && count > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-5 rounded-full bg-surface px-1 text-[11px] font-bold leading-5 text-navy ring-1 ring-line">{count}</span>}
+              {count !== undefined && count > 0 && <span aria-hidden className="absolute -right-0.5 -top-0.5 min-w-5 rounded-full bg-surface px-1 text-[11px] font-bold leading-5 text-navy ring-1 ring-line">{count}</span>}
             </span>
-            <span className="max-w-[88px] truncate">{action.label.replace(/ · \d+$/, "")}</span>
+            <span className="max-w-[88px] truncate">{action.label.replace(/ · \d+$/, "")}</span>{count !== undefined && count > 0 && <span className="sr-only">, {count} saved</span>}
           </Link>
         ) : <span />}
       </div>

@@ -120,6 +120,8 @@ export async function recordManualPayment(u: CurrentUser, invoiceId: string, ref
   const [inv] = await db.select().from(s.invoices).where(eq(s.invoices.id, invoiceId));
   if (!inv || inv.status !== "open") throw new DomainError("Invoice is not open.");
   const due = inv.amountMinor - inv.paidMinor;
+  const [dup] = await db.select({ id: s.payments.id }).from(s.payments).where(and(eq(s.payments.provider, "manual"), eq(s.payments.providerRef, reference.trim())));
+  if (dup) throw new DomainError("This bank reference has already been recorded. Check for a duplicate before recording it again.");
   const [p] = await db.insert(s.payments).values({ invoiceId, provider: "manual", providerRef: reference.trim(), amountMinor: due, currency: inv.currency, initiatedBy: u.id }).returning();
   await audit(u.id, "payment.manual_record", "payment", p.id, { reference, amountMinor: due });
   return applyPaymentEvent({ provider: "manual", eventId: `manual:${p.id}`, paymentId: p.id, status: "succeeded", amountMinor: due, payload: { reference, by: u.id } });

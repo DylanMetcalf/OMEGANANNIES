@@ -24,12 +24,14 @@ export function RequirementsForm({ req, services, kids, areas, languages, today 
   const [service, setService] = useState(req.service);
   const [mode, setMode] = useState<Mode>(req.recurring ? "weekly" : req.end && req.end !== req.start ? "range" : "day");
   const [start, setStart] = useState(req.start);
+  const [intent, setIntent] = useState<"find" | "save">("find");
   const [more, setMore] = useState(req.langs.length > 0 || req.driver || req.specialist || req.minExp > 0 || !!req.notes);
   const liveIn = service === "live_in";
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (pending) return;
     const fd = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null);
+    setIntent(fd.get("intent") === "save" ? "save" : "find");
     startTransition(() => action(fd));
   };
   const modes: [Mode, string, typeof CalendarDays][] = [["day", "One day", CalendarDays], ["range", "Several days in a row", CalendarRange], ["weekly", "Repeating each week", Repeat]];
@@ -112,8 +114,8 @@ export function RequirementsForm({ req, services, kids, areas, languages, today 
 
       <div aria-live="polite">{state?.error && <p role="alert" className="rounded-[10px] bg-bad-50 px-3 py-2 text-[13px] font-medium text-bad">{state.error}</p>}</div>
       <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] z-20 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-cream/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 lg:bottom-0">
-        <button name="intent" value="find" className="btn-cta flex-1 sm:flex-none" disabled={pending}>{pending ? "Finding nannies…" : "Show matching nannies"}</button>
-        <button name="intent" value="save" className="btn-ghost" disabled={pending}>Save for later</button>
+        <button name="intent" value="find" className="btn-cta flex-1 sm:flex-none" disabled={pending}>{pending && intent === "find" ? "Finding nannies…" : "Show matching nannies"}</button>
+        <button name="intent" value="save" className="btn-ghost" disabled={pending}>{pending && intent === "save" ? "Saving…" : "Save for later"}</button>
       </div>
     </form>
   );
