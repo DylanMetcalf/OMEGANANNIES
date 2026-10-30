@@ -58,7 +58,7 @@ export default async function NannyBooking({ params }: { params: Promise<{ id: s
         <div className="order-first space-y-6 lg:order-none">
           {(b.status === "confirmed" || b.status === "in_progress") && (
             <Section title="Your day">
-              {b.status === "confirmed" && onDates && <ActionForm action={bookingStatusAction}><input type="hidden" name="bookingId" value={b.id} /><input type="hidden" name="to" value="in_progress" /><Submit className="btn-gold w-full">Check in &amp; start</Submit></ActionForm>}
+              {b.status === "confirmed" && onDates && <ActionForm action={bookingStatusAction}><input type="hidden" name="bookingId" value={b.id} /><input type="hidden" name="to" value="in_progress" /><Submit className="btn-cta w-full">Check in &amp; start</Submit></ActionForm>}
               {b.status === "confirmed" && !onDates && <p className="text-[14px] text-muted">Check-in opens on {b.startDate}.</p>}
               {b.status === "in_progress" && <ActionForm action={bookingStatusAction} confirm="Mark this booking as complete?" className="space-y-2"><input type="hidden" name="bookingId" value={b.id} /><input type="hidden" name="to" value="completed" /><label className="label" htmlFor="note">Handover note (optional)</label><textarea id="note" name="note" rows={2} className="input" /><Submit className="btn-primary w-full">Mark care complete</Submit></ActionForm>}
             </Section>

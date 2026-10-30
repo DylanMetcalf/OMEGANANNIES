@@ -37,7 +37,7 @@ export default async function Help({ searchParams }: { searchParams: Promise<{ q
             </section>
           ))}
         </div>
-        <div className="mt-12 rounded-2xl bg-navy p-8 text-white"><p className="font-display text-[28px]">Still need a hand?</p><p className="mt-1 text-white/75">You&rsquo;ll speak to a founder, not a call centre — within 4 hours, 7 days a week.</p><div className="mt-4 flex flex-wrap gap-2"><Link href={u ? "/messages" : "/login"} className="btn-gold">Message us</Link><a href="mailto:enquiries@omeganannies.com" className="btn border border-white/30 text-white">enquiries@omeganannies.com</a></div></div>
+        <div className="mt-12 rounded-2xl bg-navy p-8 text-white"><p className="font-display text-[28px]">Still need a hand?</p><p className="mt-1 text-white/75">You&rsquo;ll speak to a founder, not a call centre — within 4 hours, 7 days a week.</p><div className="mt-4 flex flex-wrap gap-2"><Link href={u ? "/messages" : "/login"} className="btn-cta">Message us</Link><a href="mailto:enquiries@omeganannies.com" className="btn border border-white/30 text-white">enquiries@omeganannies.com</a></div></div>
       </main>
     </div>
   );

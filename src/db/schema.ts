@@ -350,6 +350,10 @@ export const bookings = pgTable("bookings", {
   /** Nanny's response to an offered booking: pending | accepted | declined (null until a nanny is assigned). */
   nannyResponse: text("nanny_response"),
   nannyRespondedAt: ts("nanny_responded_at"),
+  /** Family's ordered nanny preferences from the booking journey (first = most preferred). Not a confirmation. */
+  preferredNannyIds: uuid("preferred_nanny_ids").array().notNull().default(sql`'{}'::uuid[]`),
+  /** Family asked Omega to choose for them (creates a management task). */
+  assistanceRequested: boolean("assistance_requested").notNull().default(false),
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: created(), updatedAt: updated(),
 }, (t) => [index("bookings_family_idx").on(t.familyId), index("bookings_nanny_idx").on(t.nannyId), index("bookings_status_idx").on(t.status)]);
@@ -538,6 +542,8 @@ export const reviews = pgTable("reviews", {
   moderationNote: text("moderation_note"),
   nannyResponse: text("nanny_response"),
   reportedAt: ts("reported_at"),
+  reportReason: text("report_reason"),
+  reportedBy: uuid("reported_by").references(() => users.id),
   createdAt: created(),
 });
 
@@ -556,8 +562,11 @@ export const notifications = pgTable("notifications", {
   lastError: text("last_error"),
   readAt: ts("read_at"),
   sentAt: ts("sent_at"),
+  /** Provider message id; delivery is only "delivered" once the provider's signed callback says so. */
+  providerRef: text("provider_ref"),
+  deliveredAt: ts("delivered_at"),
   createdAt: created(),
-}, (t) => [uniqueIndex("notifications_dedupe_uq").on(t.userId, t.channel, t.dedupeKey), index("notifications_user_idx").on(t.userId, t.createdAt)]);
+}, (t) => [index("notifications_provider_ref_idx").on(t.providerRef), uniqueIndex("notifications_dedupe_uq").on(t.userId, t.channel, t.dedupeKey), index("notifications_user_idx").on(t.userId, t.createdAt)]);
 
 export const notificationPreferences = pgTable("notification_preferences", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
@@ -565,6 +574,10 @@ export const notificationPreferences = pgTable("notification_preferences", {
   emailMessages: boolean("email_messages").notNull().default(true),
   emailReminders: boolean("email_reminders").notNull().default(true),
   marketingOptIn: boolean("marketing_opt_in").notNull().default(false),
+  /** Per-category channel choices, e.g. { bookings: { email: true, sms: false, whatsapp: false } }. Security notices ignore this. */
+  channels: jsonb("channels").notNull().default({}),
+  smsConsentAt: ts("sms_consent_at"),
+  whatsappConsentAt: ts("whatsapp_consent_at"),
 });
 
 // ---------- Knowledge base & support ----------
@@ -648,3 +661,120 @@ export const settings = pgTable("settings", {
   updatedBy: uuid("updated_by").references(() => users.id),
   updatedAt: updated(),
 });
+
+// ---------- Booking journey ----------
+/** One in-progress booking journey per family, so "Continue booking" works across devices. */
+export const bookingDrafts = pgTable("booking_drafts", {
+  familyId: uuid("family_id").primaryKey().references(() => families.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  params: jsonb("params").notNull(),
+  step: text("step").notNull().default("requirements"),
+  updatedAt: updated(),
+});
+export const savedSearches = pgTable("saved_searches", {
+  id: id(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  params: jsonb("params").notNull(),
+  createdAt: created(),
+}, (t) => [index("saved_searches_family_idx").on(t.familyId)]);
+export const nannyViews = pgTable("nanny_views", {
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  nannyId: uuid("nanny_id").notNull().references(() => nannies.id, { onDelete: "cascade" }),
+  viewedAt: ts("viewed_at").notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.familyId, t.nannyId] })]);
+
+// ---------- Calendar synchronisation ----------
+export const calendarConnections = pgTable("calendar_connections", {
+  id: id(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(), // google | microsoft
+  accountEmail: text("account_email"),
+  calendarId: text("calendar_id").notNull().default("primary"),
+  /** AES-256-GCM ciphertext; never returned to the browser. */
+  accessTokenEnc: text("access_token_enc"),
+  refreshTokenEnc: text("refresh_token_enc"),
+  tokenExpiresAt: ts("token_expires_at"),
+  scopes: text("scopes"),
+  status: text("status").notNull().default("active"), // active | needs_reauth | error | disconnected
+  pushBookings: boolean("push_bookings").notNull().default(true),
+  importBusy: boolean("import_busy").notNull().default(true),
+  syncToken: text("sync_token"),
+  channelId: text("channel_id"),
+  channelTokenHash: text("channel_token_hash"),
+  channelResourceId: text("channel_resource_id"),
+  channelExpiresAt: ts("channel_expires_at"),
+  lastSyncAt: ts("last_sync_at"),
+  lastError: text("last_error"),
+  failures: smallint("failures").notNull().default(0),
+  createdAt: created(), updatedAt: updated(),
+}, (t) => [uniqueIndex("calendar_connections_user_provider_uq").on(t.userId, t.provider), index("calendar_connections_channel_idx").on(t.channelId)]);
+/** Stable mapping booking ↔ provider event: prevents duplicates and detects external edits. */
+export const calendarEventLinks = pgTable("calendar_event_links", {
+  id: id(),
+  connectionId: uuid("connection_id").notNull().references(() => calendarConnections.id, { onDelete: "cascade" }),
+  bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  providerEventId: text("provider_event_id"),
+  etag: text("etag"),
+  /** Hash of what Omega last wrote: an incoming change with a different hash is an external edit. */
+  contentHash: text("content_hash"),
+  status: text("status").notNull().default("pending"), // pending | synced | deleted | conflict | error
+  lastError: text("last_error"),
+  updatedAt: updated(),
+}, (t) => [uniqueIndex("calendar_event_links_uq").on(t.connectionId, t.bookingId), index("calendar_event_links_event_idx").on(t.providerEventId)]);
+/** External busy periods (no titles or details stored) used only to protect availability. */
+export const calendarBusyBlocks = pgTable("calendar_busy_blocks", {
+  id: id(),
+  connectionId: uuid("connection_id").notNull().references(() => calendarConnections.id, { onDelete: "cascade" }),
+  nannyId: uuid("nanny_id").references(() => nannies.id, { onDelete: "cascade" }),
+  providerEventId: text("provider_event_id").notNull(),
+  startsAt: ts("starts_at").notNull(),
+  endsAt: ts("ends_at").notNull(),
+  updatedAt: updated(),
+}, (t) => [uniqueIndex("calendar_busy_blocks_uq").on(t.connectionId, t.providerEventId), index("calendar_busy_nanny_idx").on(t.nannyId, t.startsAt)]);
+export const calendarConflicts = pgTable("calendar_conflicts", {
+  id: id(),
+  connectionId: uuid("connection_id").notNull().references(() => calendarConnections.id, { onDelete: "cascade" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // event_moved | event_deleted | busy_overlaps_booking
+  detail: text("detail").notNull(),
+  status: text("status").notNull().default("open"), // open | restored | accepted | dismissed
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  resolvedAt: ts("resolved_at"),
+  createdAt: created(),
+}, (t) => [index("calendar_conflicts_status_idx").on(t.status)]);
+
+// ---------- Referrals & loyalty (inactive until configured) ----------
+export const referralCodes = pgTable("referral_codes", {
+  id: id(),
+  code: text("code").notNull().unique(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  active: boolean("active").notNull().default(true),
+  createdAt: created(),
+}, (t) => [uniqueIndex("referral_codes_family_uq").on(t.familyId)]);
+export const referrals = pgTable("referrals", {
+  id: id(),
+  codeId: uuid("code_id").notNull().references(() => referralCodes.id),
+  referredUserId: uuid("referred_user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  referredFamilyId: uuid("referred_family_id").references(() => families.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("signed_up"), // signed_up | qualified | pending_approval | rewarded | rejected | expired
+  flags: text("flags").array().notNull().default(sql`'{}'::text[]`),
+  qualifyingBookingId: uuid("qualifying_booking_id").references(() => bookings.id),
+  decidedBy: uuid("decided_by").references(() => users.id),
+  decidedAt: ts("decided_at"),
+  createdAt: created(),
+}, (t) => [index("referrals_code_idx").on(t.codeId)]);
+/** Append-only ledger. Balances are sums; a unique (reason, ref) makes every award idempotent. */
+export const loyaltyLedger = pgTable("loyalty_ledger", {
+  id: id(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // points | credit_minor
+  delta: integer("delta").notNull(),
+  reason: text("reason").notNull(), // booking_completed | referral_reward | redemption | adjustment
+  refId: text("ref_id").notNull(),
+  note: text("note"),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: created(),
+}, (t) => [uniqueIndex("loyalty_ledger_idem_uq").on(t.familyId, t.reason, t.refId), index("loyalty_ledger_family_idx").on(t.familyId)]);

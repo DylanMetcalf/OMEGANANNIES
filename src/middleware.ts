@@ -5,8 +5,9 @@ import { NextResponse, type NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   if (!req.cookies.get("omega_session")) {
     const url = req.nextUrl.clone();
+    const next = req.nextUrl.pathname + req.nextUrl.search;
     url.pathname = "/login";
-    url.search = "";
+    url.search = `?next=${encodeURIComponent(next)}`; // validated by safeNext() after sign-in
     return NextResponse.redirect(url);
   }
   return NextResponse.next();

@@ -4,6 +4,27 @@ import { fmtDate, fmtDateTime, minutesToHHMM } from "@/lib/time";
 import { STATUS_LABEL, type BookingStatus } from "@/lib/booking-state";
 import type { BookingDetail } from "@/lib/queries";
 import type { QuoteLine } from "@/lib/pricing";
+import { progressStages, type ProgressInput } from "@/lib/booking-progress";
+
+/** Family progress tracker: real stages only, with a plain-language "what happens next". */
+export function ProgressTracker({ b }: { b: ProgressInput & { status: BookingStatus } }) {
+  const stages = progressStages(b);
+  if (!stages) return <div className="flex items-center gap-3"><StatusBadge status={b.status} /><p className="text-[14px] text-muted">This booking is {STATUS_LABEL[b.status].toLowerCase()}. Message us if you have any questions.</p></div>;
+  const cur = stages.find((s) => s.state === "current");
+  return (
+    <div>
+      <ol className="flex flex-col gap-3 sm:flex-row sm:gap-1" aria-label="Booking progress">
+        {stages.map((s) => (
+          <li key={s.key} aria-current={s.state === "current" ? "step" : undefined} className="flex items-center gap-2.5 sm:flex-1 sm:flex-col sm:items-stretch sm:gap-1.5">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full sm:h-1.5 sm:w-auto ${s.state === "done" ? "bg-ok" : s.state === "current" ? "bg-gold animate-pulse motion-reduce:animate-none" : "bg-sand"}`} />
+            <span className={`text-[13px] sm:text-[11px] ${s.state === "current" ? "font-semibold text-navy" : s.state === "done" ? "text-ink" : "text-muted"}`}>{s.label}</span>
+          </li>
+        ))}
+      </ol>
+      {cur?.next && <p className="mt-4 rounded-[10px] bg-navy-50 px-3.5 py-2.5 text-[14px] text-navy"><strong className="font-semibold">What happens next:</strong> {cur.next}</p>}
+    </div>
+  );
+}
 
 export const dates = (b: { startDate: string; endDate: string }) => (b.startDate === b.endDate ? fmtDate(b.startDate) : `${fmtDate(b.startDate)} – ${fmtDate(b.endDate)}`);
 const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

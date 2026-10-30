@@ -1,6 +1,8 @@
 "use server";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { pathFitsRoles, safeNext } from "@/lib/site";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { audit } from "@/lib/audit";
@@ -37,9 +39,12 @@ export async function signInAction(_: ActionResult, fd: FormData): Promise<Actio
     if (!u.emailVerifiedAt) throw new DomainError("Please confirm your email address first — check your inbox for the link.");
     const roles = (await db.select().from(s.userRoles).where(eq(s.userRoles.userId, u.id))).map((x) => x.role as Role);
     await createSession(u.id, roles, false);
+    // One-minute, non-sensitive flag for the brief welcome screen (first-ever vs returning sign-in).
+    (await cookies()).set("omega_welcome", u.lastLoginAt ? "back" : "new", { maxAge: 60, sameSite: "lax", path: "/" });
     await audit(u.id, "auth.login", "user", u.id, { ip });
     const p = { id: u.id, roles, permissions: u.permissions, status: u.status };
-    dest = isManagement(p) && u.mfaEnabled ? "/mfa" : homeFor(p);
+    const next = safeNext(str(fd, "next"));
+    dest = isManagement(p) && u.mfaEnabled ? "/mfa" : next && pathFitsRoles(next, roles) ? next : homeFor(p);
     return { ok: "Signed in" };
   });
   if (r?.ok) redirect(dest);

@@ -28,8 +28,10 @@ export async function publicNanny(slug: string) {
   const [n] = await db.select(PUBLIC).from(s.nannies).where(and(visible(), eq(s.nannies.slug, slug)));
   if (!n) return null;
   const quals = await db.select({ name: s.qualifications.name, issuer: s.qualifications.issuer, verified: s.qualifications.verified }).from(s.qualifications).where(and(eq(s.qualifications.nannyId, n.id), eq(s.qualifications.public, true)));
-  const reviews = await db.select({ rating: s.reviews.rating, body: s.reviews.body, response: s.reviews.nannyResponse, createdAt: s.reviews.createdAt }).from(s.reviews).where(and(eq(s.reviews.nannyId, n.id), eq(s.reviews.status, "published"))).orderBy(desc(s.reviews.createdAt));
-  return { n, quals, reviews };
+  const reviews = await db.select({ id: s.reviews.id, rating: s.reviews.rating, body: s.reviews.body, response: s.reviews.nannyResponse, createdAt: s.reviews.createdAt }).from(s.reviews).where(and(eq(s.reviews.nannyId, n.id), eq(s.reviews.status, "published"))).orderBy(desc(s.reviews.createdAt));
+  // Only the kinds of checks currently passed and in date — never documents, dates or outcomes detail.
+  const checks = (await db.select({ kind: s.verificationChecks.kind }).from(s.verificationChecks).where(and(eq(s.verificationChecks.nannyId, n.id), eq(s.verificationChecks.status, "passed"), sql`(${s.verificationChecks.expiresOn} IS NULL OR ${s.verificationChecks.expiresOn} >= current_date)`))).map((c) => c.kind as string);
+  return { n, quals, reviews, checks };
 }
 /** Free days in the next `days`: no blocking session and no unavailability. A soft indicator, not a guarantee. */
 export async function freeDays(nannyIds: string[], days = 14): Promise<Record<string, number>> {

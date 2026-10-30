@@ -23,7 +23,7 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
   const list = all.filter((x) => g.match.includes(x.b.status));
   return (
     <>
-      <PageHeader eyebrow="Bookings" title="Your bookings" actions={<Link href="/family/bookings/new" className="btn-gold">Request a nanny</Link>} />
+      <PageHeader eyebrow="Bookings" title="Your bookings" actions={<Link href="/family/bookings/new" className="btn-cta">Request a nanny</Link>} />
       <nav aria-label="Booking groups" className="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-sand/50 p-1">
         {GROUPS.map((x) => <Link key={x.key} href={`?tab=${x.key}`} aria-current={x.key === g.key ? "page" : undefined} className={`flex-1 whitespace-nowrap rounded-lg px-4 py-2 text-center text-[14px] ${x.key === g.key ? "bg-white font-medium text-navy shadow-sm" : "text-muted"}`}>{x.label} ({all.filter((y) => x.match.includes(y.b.status)).length})</Link>)}
       </nav>

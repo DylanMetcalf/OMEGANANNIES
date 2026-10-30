@@ -6,12 +6,10 @@ import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { audit } from "@/lib/audit";
 import { assertUser } from "@/lib/auth";
-import { acceptQuotation, bookingAccess, createBookingRequest, DomainError, familyIdsOf, transition } from "@/lib/bookings";
-import { bool, list, opt, run, str } from "@/lib/forms";
-import { parseMoney } from "@/lib/money";
+import { acceptQuotation, bookingAccess, DomainError, familyIdsOf, transition } from "@/lib/bookings";
+import { bool, opt, run, str } from "@/lib/forms";
 import { deliverPending } from "@/lib/notify";
 import { startPayment } from "@/lib/payments/service";
-import { hhmmToMinutes } from "@/lib/time";
 import { issueToken } from "@/lib/tokens";
 import { env } from "@/lib/env";
 import { rateLimit } from "@/lib/rate-limit";
@@ -23,31 +21,6 @@ async function familyUser() {
   const [familyId] = await familyIdsOf(u.id);
   if (!familyId) throw new DomainError("No household is linked to your account.");
   return { u, familyId };
-}
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a valid date.");
-
-export async function requestBookingAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
-  let id = "";
-  const r = await run(async () => {
-    const { u, familyId } = await familyUser();
-    const startDate = date.parse(str(fd, "startDate"));
-    const endDate = date.parse(str(fd, "endDate") || startDate);
-    const liveIn = str(fd, "serviceCode") === "live_in";
-    const b = await createBookingRequest(u, {
-      familyId, serviceCode: z.string().min(1, "Choose a service.").parse(str(fd, "serviceCode")), startDate, endDate,
-      dailyStartMinute: liveIn ? 480 : hhmmToMinutes(str(fd, "startTime") || "09:00"), dailyEndMinute: liveIn ? 480 : hhmmToMinutes(str(fd, "endTime") || "17:00"),
-      serviceLocationId: opt(fd, "serviceLocationId"), childIds: list(fd, "childIds"), requestedNannyId: opt(fd, "requestedNannyId"), liveIn,
-      overnight: bool(fd, "overnight"), needsDriver: bool(fd, "needsDriver"), requiredLanguages: list(fd, "languages"), specialistCare: bool(fd, "specialistCare"),
-      budgetMaxMinor: str(fd, "budget") ? parseMoney(str(fd, "budget")) : null, specialRequests: opt(fd, "specialRequests")?.slice(0, 2000) ?? null,
-      idempotencyKey: z.string().uuid().parse(str(fd, "idempotencyKey")), termsAccepted: bool(fd, "terms"),
-      weekdays: list(fd, "weekdays").map(Number).filter((w) => Number.isInteger(w) && w >= 0 && w <= 6),
-    });
-    void deliverPending();
-    id = b.id;
-    return { ok: "Request sent" };
-  });
-  if (id) redirect(`/family/bookings/${id}?new=1`);
-  return r;
 }
 
 export async function cancelBookingAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -80,17 +53,6 @@ export async function payInvoiceAction(_: ActionResult, fd: FormData): Promise<A
   return r;
 }
 
-export async function toggleFavouriteAction(fd: FormData) {
-  const { familyId } = await familyUser();
-  const nannyId = str(fd, "nannyId");
-  const [n] = await db.select().from(s.nannies).where(and(eq(s.nannies.id, nannyId), eq(s.nannies.status, "approved"), eq(s.nannies.published, true)));
-  if (!n) return;
-  const [f] = await db.select().from(s.favourites).where(and(eq(s.favourites.familyId, familyId), eq(s.favourites.nannyId, nannyId)));
-  if (f) await db.delete(s.favourites).where(and(eq(s.favourites.familyId, familyId), eq(s.favourites.nannyId, nannyId)));
-  else await db.insert(s.favourites).values({ familyId, nannyId });
-  revalidatePath("/family", "layout");
-}
-
 const childSchema = z.object({
   preferredName: z.string().min(1, "Enter a name.").max(60), dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   careRequirements: z.string().max(1000).nullable(), allergies: z.string().max(500).nullable(), dietaryNeeds: z.string().max(500).nullable(), routines: z.string().max(1000).nullable(),
@@ -109,7 +71,7 @@ export async function saveChildAction(_: ActionResult, fd: FormData): Promise<Ac
     } else await db.insert(s.children).values({ ...v, familyId, consentRecordedAt: new Date() });
     await db.insert(s.consents).values({ userId: u.id, policy: "child_data", version: "2026-10", granted: true });
     await audit(u.id, id ? "child.update" : "child.create", "child", id, undefined);
-    revalidatePath("/family/children");
+    revalidatePath("/family/my-family");
     return { ok: "Saved." };
   });
 }
@@ -121,7 +83,7 @@ export async function deleteChildAction(_: ActionResult, fd: FormData): Promise<
     if (used.length) throw new DomainError("This child is linked to bookings. Message our team to have their record removed under our retention policy.");
     await db.delete(s.children).where(and(eq(s.children.id, id), eq(s.children.familyId, familyId)));
     await audit(u.id, "child.delete", "child", id);
-    revalidatePath("/family/children");
+    revalidatePath("/family/my-family");
     return { ok: "Removed." };
   });
 }
@@ -136,7 +98,7 @@ export async function saveHouseholdAction(_: ActionResult, fd: FormData): Promis
       bookingPreferences: f("bookingPreferences", 1000), emergencyContactName: f("emergencyContactName"), emergencyContactPhone: f("emergencyContactPhone", 40), updatedAt: new Date(),
     }).where(eq(s.families.id, familyId));
     await audit(u.id, "family.update", "family", familyId);
-    revalidatePath("/family/profile");
+    revalidatePath("/family/my-family");
     return { ok: "Household details saved." };
   });
 }
@@ -146,7 +108,7 @@ export async function addLocationAction(_: ActionResult, fd: FormData): Promise<
     const v = z.object({ label: z.string().min(1, "Add a label.").max(60), area: z.string().min(1, "Choose an area."), addressLine: z.string().max(300).nullable(), accessNotes: z.string().max(500).nullable() })
       .parse({ label: str(fd, "label"), area: str(fd, "area"), addressLine: opt(fd, "addressLine"), accessNotes: opt(fd, "accessNotes") });
     await db.insert(s.serviceLocations).values({ ...v, familyId });
-    revalidatePath("/family/profile");
+    revalidatePath("/family/my-family");
     return { ok: "Location added." };
   });
 }

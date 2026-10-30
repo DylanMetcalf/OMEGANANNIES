@@ -25,7 +25,7 @@ export default async function Home() {
             <p className="eyebrow">The Omega Nannies portal</p>
             <h1 className="mt-4 text-[40px] leading-[1.08] sm:text-[54px]">Trusted childcare, beautifully arranged.</h1>
             <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-muted">One secure place to request a nanny, meet them before you book, approve your quotation, pay safely and stay in touch — with the founders a message away.</p>
-            <div className="mt-8 flex flex-wrap gap-3"><Link href="/register" className="btn-gold">Create a family account</Link><Link href="/login" className="btn-secondary">Sign in</Link></div>
+            <div className="mt-8 flex flex-wrap gap-3"><Link href="/register" className="btn-cta">Create a family account</Link><Link href="/login" className="btn-secondary">Sign in</Link></div>
             <p className="mt-6 flex items-center gap-2 text-[13px] text-muted"><ShieldCheck aria-hidden className="h-4 w-4 text-ok" />Every Omega nanny is interviewed, police-clearance verified, First Aid certified and reference checked.</p>
           </div>
           <div className="relative mx-auto w-full max-w-[440px]">

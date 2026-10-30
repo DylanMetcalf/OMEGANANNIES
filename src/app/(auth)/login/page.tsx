@@ -2,11 +2,13 @@ import Link from "next/link";
 import { ActionForm, Submit } from "@/components/action-form";
 import { Notice } from "@/components/ui";
 import { env } from "@/lib/env";
+import { safeNext } from "@/lib/site";
 import { signInAction } from "../actions";
 
 export const metadata = { title: "Sign in" };
-export default async function Login({ searchParams }: { searchParams: Promise<{ welcome?: string; verified?: string; closed?: string; "email-changed"?: string }> }) {
+export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string; welcome?: string; verified?: string; closed?: string; "email-changed"?: string }> }) {
   const sp = await searchParams;
+  const next = safeNext(sp.next);
   const msg = sp.welcome ? "Your account is ready. Please sign in." : sp.verified ? "Email confirmed — your account is active. Please sign in." : sp["email-changed"] ? "Your email address was changed. Sign in with the new address." : sp.closed ? "Your account has been closed." : null;
   return (
     <>
@@ -14,7 +16,9 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       <h1 className="mt-2 text-[28px]">Sign in to your portal</h1>
       <p className="mt-2 text-muted">Families, nannies and the Omega team all sign in here.</p>
       {msg && <div className="mt-6"><Notice tone="ok">{msg}</Notice></div>}
+      {next?.startsWith("/family/book") && <div className="mt-6"><Notice tone="info">Sign in to continue booking. New to Omega? <Link className="link" href="/register">Create a family account</Link> — it takes a minute.</Notice></div>}
       <ActionForm action={signInAction} className="mt-8 space-y-4">
+        {next && <input type="hidden" name="next" value={next} />}
         <div><label className="label" htmlFor="email">Email</label><input id="email" name="email" type="email" autoComplete="email" required className="input" /></div>
         <div>
           <div className="flex justify-between"><label className="label" htmlFor="password">Password</label><Link href="/forgot-password" className="text-[13px] link">Forgot password?</Link></div>

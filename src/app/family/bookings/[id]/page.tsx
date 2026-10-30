@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, Submit } from "@/components/action-form";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { BookingFacts, InvoiceRows, Journey, QuoteTable, Timeline } from "@/components/booking/parts";
+import { BookingFacts, InvoiceRows, ProgressTracker, QuoteTable, Timeline } from "@/components/booking/parts";
 import { Notice, PageHeader, Section, StatusBadge } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { canTransition } from "@/lib/booking-state";
@@ -26,9 +26,9 @@ export default async function FamilyBooking({ params, searchParams }: { params: 
     <>
       {d.share && <AutoRefresh seconds={20} />}
       <PageHeader eyebrow={`Booking ${b.reference}`} title={d.serviceName} description={<StatusBadge status={b.status} />}
-        actions={<>{d.conversation && <Link href={`/messages/${d.conversation.id}`} className="btn-secondary">Message nanny</Link>}{["completed", "cancelled", "confirmed"].includes(b.status) && <Link href={`/family/bookings/new?repeat=${b.id}`} className="btn-secondary">Book again</Link>}</>} />
-      {(await searchParams).new && <div className="mb-6"><Notice tone="ok" title="Request received">Thank you — this is a request, not yet a confirmed booking. We&rsquo;ll be in touch within 4 hours.</Notice></div>}
-      <div className="card mb-6 p-5"><Journey status={b.status} /></div>
+        actions={<>{d.conversation && <Link href={`/messages/${d.conversation.id}`} className="btn-secondary">Message nanny</Link>}{["completed", "cancelled", "confirmed"].includes(b.status) && <Link href={`/family/bookings/new?repeat=${b.id}`} prefetch={false} className="btn-secondary">Book again</Link>}</>} />
+      {(await searchParams).new && <div className="mb-6 animate-rise"><Notice tone="ok" title={`Request received — reference ${b.reference}`}>Thank you. This is a request, not yet a confirmed booking, and nothing has been charged. We&rsquo;ll reply within 4 hours; you&rsquo;ll find this request under Bookings and we&rsquo;ll notify you at each step.</Notice></div>}
+      <div className="card mb-6 p-5"><ProgressTracker b={b} /></div>
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <div className="space-y-6">
           {sentQuote && b.status === "awaiting_approval" && (
@@ -38,7 +38,7 @@ export default async function FamilyBooking({ params, searchParams }: { params: 
               <ActionForm action={acceptQuoteAction} className="mt-4 space-y-3">
                 <input type="hidden" name="quotationId" value={sentQuote.id} />
                 <label className="flex gap-2.5 text-[14px]"><input type="checkbox" name="terms" required className="mt-1 accent-navy" /><span>I accept this quotation and the booking and cancellation terms. I understand the booking is confirmed only once the deposit of <strong>{formatMoney(sentQuote.depositMinor)}</strong> is received.</span></label>
-                <Submit className="btn-gold" pendingText="Accepting…">Accept quotation</Submit>
+                <Submit className="btn-cta" pendingText="Accepting…">Accept quotation</Submit>
               </ActionForm>
             </Section>
           )}

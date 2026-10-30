@@ -78,6 +78,8 @@ export type BookingRequestInput = {
   serviceLocationId: string | null; childIds: string[]; requestedNannyId: string | null; liveIn: boolean; overnight: boolean;
   needsDriver: boolean; requiredLanguages: string[]; specialistCare: boolean; budgetMaxMinor: number | null;
   specialRequests: string | null; idempotencyKey: string; termsAccepted: boolean; weekdays?: number[] | null;
+  /** Ordered family preferences from the booking journey (validated as published nannies by the caller). */
+  preferredNannyIds?: string[]; assistanceRequested?: boolean; areaText?: string | null;
 };
 
 export async function createBookingRequest(u: CurrentUser, i: BookingRequestInput): Promise<Booking> {
@@ -115,6 +117,7 @@ export async function createBookingRequest(u: CurrentUser, i: BookingRequestInpu
         requiredLanguages: i.requiredLanguages, specialistCare: i.specialistCare, budgetMaxMinor: i.budgetMaxMinor,
         specialRequests: i.specialRequests, idempotencyKey: i.idempotencyKey, weekdays, termsAcceptedAt: new Date(), termsVersion: "2026-10",
         createdBy: u.id, source: "portal", isDemo: u.isDemo,
+        preferredNannyIds: i.preferredNannyIds ?? [], assistanceRequested: !!i.assistanceRequested, areaText: i.areaText ?? null,
       }).returning();
       await tx.insert(s.bookingChildren).values(i.childIds.map((childId) => ({ bookingId: b.id, childId })));
       await tx.insert(s.bookingSessions).values(sessions.map((x) => ({ bookingId: b.id, startsAt: x.startsAt, endsAt: x.endsAt })));
@@ -222,7 +225,7 @@ export async function requirementsFor(b: Booking): Promise<MatchRequirements> {
   const ages = [...new Set(kids.map((k) => ageFrom(k.dob)).filter((a): a is number => a !== null).map(ageGroup))];
   let area = b.areaText;
   if (b.serviceLocationId) { const [l] = await db.select().from(s.serviceLocations).where(eq(s.serviceLocations.id, b.serviceLocationId)); area = l?.area ?? area; }
-  return { serviceCode: b.serviceCode, ageGroups: ages, requiredLanguages: b.requiredLanguages, needsDriver: b.needsDriver, specialist: b.specialistCare, area, requestedNannyId: b.requestedNannyId, budgetMaxMinor: b.budgetMaxMinor, estimatedTotalMinor: null };
+  return { serviceCode: b.serviceCode, ageGroups: ages, requiredLanguages: b.requiredLanguages, needsDriver: b.needsDriver, specialist: b.specialistCare, area, requestedNannyId: b.requestedNannyId, preferredNannyIds: b.preferredNannyIds, budgetMaxMinor: b.budgetMaxMinor, estimatedTotalMinor: null };
 }
 
 export async function runMatching(u: CurrentUser, bookingId: string) {

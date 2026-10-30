@@ -13,6 +13,10 @@
   --color-gold: #b9892e;       /* accent — sparing highlights, progress */
   --color-gold-600: #8a6413;   /* accent text on light (≥4.5:1) */
   --color-gold-50: #f8f1e3;    /* accent tint */
+  /* Primary call to action ("Book a nanny"): a richer, brighter gold that carries white text at 4.63:1 */
+  --color-cta: #9f6a00;
+  --color-cta-600: #8c5c00;    /* hover (5.76:1) */
+  --color-cta-700: #7a5000;    /* pressed (7.06:1) */
   /* Neutrals */
   --color-cream: #f7f6f3;      /* app background */
   --color-sand: #efede8;       /* subtle surface / tracks */
@@ -35,7 +39,14 @@
   --shadow-soft: 0 1px 2px rgb(23 32 56 / 0.04), 0 2px 8px rgb(23 32 56 / 0.04);
   --shadow-pop: 0 12px 32px rgb(23 32 56 / 0.14), 0 2px 6px rgb(23 32 56 / 0.06);
   --animate-in: fade-in 160ms ease-out;
+  --animate-pop: pop 260ms cubic-bezier(.3,1.6,.5,1);
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-rise: rise 220ms cubic-bezier(.2,.8,.2,1);
   @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @keyframes pop { 0% { transform: scale(1); } 45% { transform: scale(1.22); } 100% { transform: scale(1); } }
+  @keyframes shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 }
 
 @layer base {
@@ -59,7 +70,11 @@
 }
 @utility btn { @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-4 py-2 text-[14px] font-semibold transition-[background-color,border-color,color,box-shadow] duration-150 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-h-[44px] active:translate-y-px; }
 @utility btn-primary { @apply btn bg-navy text-white hover:bg-navy-700 shadow-sm; }
-@utility btn-gold { @apply btn bg-gold text-ink hover:bg-[#c89a3f] shadow-sm; }
+/* Primary CTA — the single treatment for every "Book a nanny" style action. */
+@utility btn-cta {
+  @apply btn bg-cta text-white hover:bg-cta-600 active:bg-cta-700 shadow-[0_1px_2px_rgb(23_32_56/0.12),0_6px_16px_-6px_rgb(159_106_0/0.55)] focus-visible:outline-offset-3 disabled:bg-cta/60 disabled:shadow-none;
+  &[aria-busy="true"] { @apply cursor-progress opacity-90; }
+}
 @utility btn-secondary { @apply btn bg-surface text-ink border border-line hover:border-navy/30 hover:bg-cream; }
 @utility btn-ghost { @apply btn text-ink hover:bg-sand; }
 @utility btn-danger { @apply btn bg-surface text-bad border border-bad/30 hover:bg-bad-50; }
@@ -73,3 +88,8 @@
 }
 @utility link { @apply text-navy font-medium underline decoration-navy/25 underline-offset-4 hover:decoration-navy; }
 @utility chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] cursor-pointer has-[:checked]:border-navy has-[:checked]:bg-navy-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus; }
+
+/* Cards that open something: gentle lift on hover, none under reduced motion (handled globally). */
+@utility card-link { @apply transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-navy/20 hover:shadow-[var(--shadow-pop)]; }
+/* Skeleton placeholder for content that is loading. */
+@utility skeleton { @apply rounded-[8px] bg-sand; background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent); background-size: 400px 100%; background-repeat: no-repeat; animation: var(--animate-shimmer); }

@@ -100,7 +100,7 @@ export default async function Workspace({ params }: { params: Promise<{ id: stri
                 <details open={q.status === "draft"}>
                   <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 text-[14px]"><span>v{q.version} · <strong>{formatMoney(q.totalMinor)}</strong> · deposit {formatMoney(q.depositMinor)}</span><Badge tone={q.status === "accepted" ? "ok" : q.status === "sent" ? "gold" : "neutral"}>{q.status}</Badge></summary>
                   <div className="mt-3"><QuoteTable lines={q.lines as QuoteLine[]} total={q.totalMinor} deposit={q.depositMinor} adjustment={q.adjustmentMinor} adjustmentReason={q.adjustmentReason} /></div>
-                  {q.status === "draft" && manage && <ActionForm action={A.sendQuoteAction} className="mt-3">{hidden}<input type="hidden" name="quotationId" value={q.id} /><Submit className="btn-gold">Send to family</Submit>{!b.nannyId && <span className="ml-3 text-[13px] text-warn">Assign a nanny first</span>}</ActionForm>}
+                  {q.status === "draft" && manage && <ActionForm action={A.sendQuoteAction} className="mt-3">{hidden}<input type="hidden" name="quotationId" value={q.id} /><Submit className="btn-cta">Send to family</Submit>{!b.nannyId && <span className="ml-3 text-[13px] text-warn">Assign a nanny first</span>}</ActionForm>}
                 </details>
               </li>
             ))}</ul>}

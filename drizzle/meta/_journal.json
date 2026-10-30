@@ -29,6 +29,13 @@
       "when": 1793297032503,
       "tag": "0003_onboarding_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793350000000,
+      "tag": "0004_journey_calendar_growth",
+      "breakpoints": true
     }
   ]
 }

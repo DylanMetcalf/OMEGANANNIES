@@ -5,6 +5,7 @@
 export type MatchRequirements = {
   serviceCode: string; ageGroups: string[]; requiredLanguages: string[]; needsDriver: boolean; specialist: boolean;
   area: string | null; requestedNannyId: string | null; budgetMaxMinor: number | null; estimatedTotalMinor: number | null;
+  preferredNannyIds?: string[];
 };
 export type Candidate = {
   id: string; displayName: string; status: string; published: boolean; services: string[]; languages: string[]; ageGroups: string[];
@@ -42,7 +43,9 @@ export function evaluate(c: Candidate, r: MatchRequirements, today = new Date().
   if (r.area && c.areas.some((a) => a.toLowerCase() === r.area!.toLowerCase())) add(15, `Covers ${r.area}`);
   else if (r.area) reasons.push({ kind: "review", text: `Travel to ${r.area} needs confirming` });
   add(Math.min(15, c.yearsExperience * 1.5) | 0, `${c.yearsExperience} years' experience`);
-  if (r.requestedNannyId === c.id) add(15, "Requested by the family");
+  const rank = r.preferredNannyIds?.indexOf(c.id) ?? -1;
+  if (rank >= 0) add([15, 10, 6][rank] ?? 4, `Family's ${["1st", "2nd", "3rd"][rank] ?? `${rank + 1}th`} preference`);
+  else if (r.requestedNannyId === c.id) add(15, "Requested by the family");
   if (c.previousBookingsWithFamily > 0) add(10, `Has cared for this family before (${c.previousBookingsWithFamily}×)`);
   if (r.specialist && c.specialistExperience) add(5, "Specialist experience recorded");
   if (c.canDrive && !r.needsDriver) add(2, "Can drive");

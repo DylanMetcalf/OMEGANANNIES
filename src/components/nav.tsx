@@ -3,16 +3,18 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  BarChart3, Bell, BookOpen, CalendarDays, ClipboardCheck, CreditCard, FileText, HeartHandshake, Home, LayoutDashboard,
-  LifeBuoy, ListChecks, Menu, MessageSquare, Search, Settings, ShieldCheck, Tag, UserRound, Users, Wallet, X, type LucideIcon,
+  ArrowRight, ArrowUpRight, BarChart3, Bell, Bookmark, BookOpen, CalendarDays, CalendarPlus, ClipboardCheck, CreditCard, FileText, Gift, HeartHandshake, Home, Inbox, LayoutDashboard,
+  LifeBuoy, ListChecks, Menu, MessageSquare, Plus, Search, Settings, ShieldCheck, Tag, UserRound, Users, Wallet, X, type LucideIcon,
 } from "lucide-react";
-import type { NavItem } from "./shell";
+import type { NavItem, PrimaryAction } from "./shell";
+import { SITE_LINKS } from "@/lib/site";
 import { signOutAction } from "@/app/(auth)/actions";
 
 const ICONS: Record<string, LucideIcon> = {
   home: Home, search: Search, calendar: CalendarDays, users: Users, message: MessageSquare, card: CreditCard, house: HeartHandshake,
   settings: Settings, help: LifeBuoy, dashboard: LayoutDashboard, file: FileText, tag: Tag, chart: BarChart3, book: BookOpen,
   shield: ShieldCheck, profile: UserRound, wallet: Wallet, tasks: ListChecks, check: ClipboardCheck, bell: Bell,
+  plus: Plus, bookmark: Bookmark, gift: Gift, inbox: Inbox, arrow: ArrowRight, calendarPlus: CalendarPlus,
 };
 export const Icon = ({ name, className = "h-[18px] w-[18px]" }: { name: string; className?: string }) => {
   const C = ICONS[name] ?? Home;
@@ -65,7 +67,13 @@ export function MobileNav({ nav, portal, user }: { nav: NavItem[]; portal: strin
             <div><p className="eyebrow">{portal}</p><p className="text-[14px] font-medium text-ink">{user.name}</p></div>
             <button className="btn-ghost btn-sm" onClick={() => setOpen(false)} aria-label="Close menu"><X aria-hidden className="h-5 w-5" /></button>
           </div>
-          <div className="flex-1 overflow-y-auto py-3"><NavLinks nav={nav} onNavigate={() => setOpen(false)} /></div>
+          <div className="flex-1 overflow-y-auto py-3">
+            <NavLinks nav={nav} onNavigate={() => setOpen(false)} />
+            <div className="mx-6 mt-5 border-t border-line pt-4">
+              <p className="eyebrow mb-2">Omega Nannies</p>
+              <ul className="space-y-1">{SITE_LINKS.map((l) => <li key={l.href}><a href={l.href} target="_blank" rel="noopener noreferrer" className="flex min-h-[40px] items-center justify-between text-[14px] text-muted hover:text-navy">{l.label}<ArrowUpRight aria-hidden className="h-4 w-4" /></a></li>)}</ul>
+            </div>
+          </div>
           <form action={signOutAction} className="px-5"><button className="btn-secondary w-full">Sign out</button></form>
         </div>
       </dialog>
@@ -73,25 +81,51 @@ export function MobileNav({ nav, portal, user }: { nav: NavItem[]; portal: strin
   );
 }
 
+/** Pick the primary action for the current page (e.g. "Shortlist" while browsing nannies). Empty href hides it. */
+function resolvePrimary(path: string, p?: PrimaryAction) {
+  if (!p) return null;
+  const c = p.contextual?.find((r) => (r.exact ? path === r.prefix : path === r.prefix || path.startsWith(r.prefix + "/")));
+  if (c) return c.href ? c : null;
+  return p;
+}
+
 /**
- * Phone tab bar for the four primary destinations plus "More". Rendered outside the sticky header: a
- * backdrop-filter on an ancestor would otherwise become the containing block for this fixed element.
+ * Phone tab bar: three primary destinations, a raised role-specific main action in the centre, and "More".
+ * Rendered outside the sticky header: a backdrop-filter on an ancestor would otherwise become the containing block.
  */
-export function BottomTabs({ nav }: { nav: NavItem[] }) {
+export function BottomTabs({ nav, primary, accent }: { nav: NavItem[]; primary?: PrimaryAction; accent?: boolean }) {
   const path = usePathname();
-  const primary = nav.slice(0, 4);
+  const tabs = nav.filter((n) => n.tab).slice(0, 3);
+  const action = resolvePrimary(path, primary);
+  const [count, setCount] = useState<number | undefined>(action && "count" in action ? action.count : undefined);
+  useEffect(() => { setCount(action && "count" in action ? action.count : undefined); }, [action]);
+  useEffect(() => { const h = (e: Event) => setCount((e as CustomEvent<number>).detail); window.addEventListener("omega:shortlist", h); return () => window.removeEventListener("omega:shortlist", h); }, []);
+  const tab = (n: NavItem) => {
+    const on = isActive(path, n.href);
+    return (
+      <Link key={n.href} href={n.href} prefetch={false} aria-current={on ? "page" : undefined} className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${on ? "text-navy" : "text-muted"}`}>
+        <Icon name={n.icon} className="h-5 w-5" />{n.label.split(" ")[0]}
+        {!!n.badge && <span className="absolute right-[26%] top-2 h-2 w-2 rounded-full bg-gold" aria-label={`${n.badge} unread`} />}
+      </Link>
+    );
+  };
   return (
-    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-        {primary.map((n) => {
-          const on = isActive(path, n.href);
-          return (
-            <Link key={n.href} href={n.href} prefetch={false} aria-current={on ? "page" : undefined} className={`relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${on ? "text-navy" : "text-muted"}`}>
-              <Icon name={n.icon} className="h-5 w-5" />{n.label.split(" ")[0]}
-              {!!n.badge && <span className="absolute right-[28%] top-2 h-2 w-2 rounded-full bg-gold" aria-label={`${n.badge} unread`} />}
-            </Link>
-          );
-        })}
-        <button onClick={() => window.dispatchEvent(new Event("omega:menu"))} aria-haspopup="dialog" className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted"><Menu aria-hidden className="h-5 w-5" />More</button>
-      </nav>
+    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 items-end border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      {tabs.slice(0, 2).map(tab)}
+      <div className="flex justify-center">
+        {action ? (
+          <Link href={action.href} prefetch={false} aria-label={count !== undefined ? `${action.label}, ${count} saved` : action.label}
+            className="group relative -mt-5 mb-1 flex flex-col items-center gap-1 text-[11px] font-semibold text-ink">
+            <span className={`relative inline-flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_8px_20px_-6px_rgb(23_32_56/0.45)] ring-4 ring-surface transition-transform group-active:scale-95 ${accent ? "bg-cta" : "bg-navy"}`}>
+              <Icon name={action.icon} className="h-6 w-6" />
+              {count !== undefined && count > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-5 rounded-full bg-surface px-1 text-[11px] font-bold leading-5 text-navy ring-1 ring-line">{count}</span>}
+            </span>
+            <span className="max-w-[88px] truncate">{action.label.replace(/ · \d+$/, "")}</span>
+          </Link>
+        ) : <span />}
+      </div>
+      {tabs.slice(2).map(tab)}
+      <button onClick={() => window.dispatchEvent(new Event("omega:menu"))} aria-haspopup="dialog" className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted"><Menu aria-hidden className="h-5 w-5" />More</button>
+    </nav>
   );
 }
