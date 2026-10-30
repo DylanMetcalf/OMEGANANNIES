@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { audit } from "./audit";
+import { DomainError } from "./bookings";
 import { putObject, sniffMime } from "./storage";
 
 /**
@@ -56,8 +57,15 @@ export type ImportReport = { found: number; created: number; updated: number; un
 
 export async function importWebsiteNannies(actorId: string | null, opts: { fetchImpl?: typeof fetch; html?: string; isDemo?: boolean } = {}): Promise<ImportReport> {
   const f = opts.fetchImpl ?? fetch;
-  const html = opts.html ?? (await (await f(`${WEBSITE_BASE}/our-nannies`, { signal: AbortSignal.timeout(15000) })).text());
+  let html = opts.html;
+  if (html === undefined) {
+    // A failed fetch must not record an empty "successful" import, so fail the whole run with a clear message.
+    const res = await f(`${WEBSITE_BASE}/our-nannies`, { signal: AbortSignal.timeout(15000) }).catch(() => null);
+    if (!res?.ok) throw new DomainError(`The website could not be reached${res ? ` (HTTP ${res.status})` : ""}. Nothing was changed; try again later.`);
+    html = await res.text();
+  }
   const list = parseNannies(html);
+  if (!list.length) throw new DomainError("No nanny profiles were found on the website page. The page layout may have changed; nothing was imported.");
   const r: ImportReport = { found: list.length, created: 0, updated: 0, unchanged: 0, photos: 0, skippedFields: 0, errors: [] };
   const now = new Date();
   for (const w of list) {
@@ -69,8 +77,9 @@ export async function importWebsiteNannies(actorId: string | null, opts: { fetch
       if (w.photo && /^\/storage\/images\/[\w.-]+\.(jpe?g|png|webp)$/i.test(w.photo) && (!existing || !existing.photoKey)) {
         try {
           const res = await f(`${WEBSITE_BASE}${w.photo}`, { signal: AbortSignal.timeout(15000) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const buf = Buffer.from(await res.arrayBuffer());
-          if (res.ok && buf.length < 8 * 1024 * 1024 && sniffMime(buf)) { photoKey = (await putObject(buf, sniffMime(buf)!)).key; r.photos++; }
+          if (buf.length < 8 * 1024 * 1024 && sniffMime(buf)) { photoKey = (await putObject(buf, sniffMime(buf)!)).key; r.photos++; }
         } catch (e) { r.errors.push(`${w.name}: photo ${(e as Error).message}`); }
       }
       const prov = { source: "website", verified: false, at: now.toISOString(), by: actorId };

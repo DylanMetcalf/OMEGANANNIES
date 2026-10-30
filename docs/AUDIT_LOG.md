@@ -7,7 +7,7 @@ Five progressive audit-and-improvement cycles. Each finding records evidence, ro
 | 1 | Baseline functionality & integrity | 14 | 14 | 0 |
 | 2 | Security, privacy & data integrity | 12 | 11 | 1 (documented) |
 | 3 | Design, UI/UX & accessibility | 9 | 9 | 0 |
-| 4 | End-to-end operations & edge cases | see §4 | | |
+| 4 | End-to-end operations & edge cases | 9 | 8 | 1 (documented) |
 | 5 | Independent production-readiness review | see §5 | | |
 
 ## 1. Audit 1 — Baseline functionality and implementation integrity
@@ -72,3 +72,22 @@ Previously verified and re-run: forged/replayed PayFast notices, amount tamperin
 | A3-09 | Info | Motion | Entrance fade could skew automated contrast checks | — | Fade is 160 ms and disabled under `prefers-reduced-motion`; tests wait for it | a11y spec | Noted |
 
 Keyboard-only sign-in, skip link and visible focus are covered by an automated test. Screen-reader testing with NVDA/VoiceOver was not possible in this environment and remains a recommended manual check.
+
+## 4. Audit 4 — End-to-end operations and edge cases
+
+**Method:** walked each operational path looking for retry, outage and ordering hazards: double submission, second browser tab, provider retries, website outage, re-import after edits, reschedule into a clash, cancellation releasing a hold, session revocation mid-task, notification retries. Each confirmed hazard got a service-level test against real Postgres; session revocation got a browser test.
+**Evidence:** `tests/integration/operations.test.ts` (8 tests) and the new session test in `tests/e2e/security.spec.ts`; `npm test` → 48/48; E2E journeys + security → 20/20; the mobile navigation test passed 3 times in a row after A4-05.
+
+| ID | Sev | Module | Evidence / reproduction | Root cause | Remediation | Test | Result |
+|---|---|---|---|---|---|---|---|
+| A4-01 | High | Payments | Two payment attempts for one deposit both succeed at the provider (two tabs) → `paid_minor` became twice the invoice and nobody was told | Success handler added the amount without re-checking the invoice | Invoice row locked (`FOR UPDATE`) and checked; an over-payment is recorded as succeeded but not counted, flagged with outcome `duplicate_payment_refund_needed`, an internal booking note, an audit event and a high-priority refund task | `operations › payment retries` | Fixed |
+| A4-02 | Medium | Payments | Double click / back button on “Pay” created a fresh payable attempt each time | `startPayment` always inserted | Reuses the same user’s open attempt for the same invoice and amount (2-hour window) | same | Fixed |
+| A4-03 | Medium | Website import | Site unreachable → raw `fetch failed`; a 5xx error page was parsed as “0 found” and overwrote the last-import summary | Response status never checked | Fails the whole run with a clear message (HTTP status included) and changes nothing; an empty parse (layout changed) also fails instead of reporting success | `operations › website import` | Fixed |
+| A4-04 | Low | Website import | Photo request returning an error page was downloaded before being rejected | Status checked after reading the body | Status checked first; photo errors are listed in the report and the profile is still imported | same | Fixed |
+| A4-05 | Low | Mobile navigation | Mobile navigation E2E failed once in about 20 runs: “Menu” tapped before the page hydrated, so nothing opened | The drawer is opened by client JavaScript; on a slow phone, an early tap does nothing | Test waits for hydration. Product impact: a tap in the first moments after load is ignored, and the bottom tab bar (plain links) still works without JS | E2E `@mobile` ×3 | **Open (Low) — documented** |
+| A4-06 | — | Booking | Reschedule a booking onto days where the nanny holds another family’s booking | — | Exclusion constraint → `ConflictError`; the booking keeps its original dates | `operations › schedule changes` | Verified |
+| A4-07 | — | Booking | Cancel a held booking → can another family now book that nanny? | — | The cancelled booking’s sessions stop blocking; the second acceptance succeeds | same | Verified |
+| A4-08 | — | Notifications | Same notification sent 3 times (retried job) | — | Dedupe key → one in-app row | `operations › notifications` | Verified |
+| A4-09 | — | Sessions | Session revoked (expiry, “sign out others”, suspension) while a page is open | — | Next action returns “Not signed in”; next navigation redirects to `/login` | E2E security | Verified |
+
+Website re-import is idempotent (re-running creates nothing new) and never overwrites fields edited by Omega or a nanny, or fields that have been verified (both tested). CSV quoting and blank lines are handled.

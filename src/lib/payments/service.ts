@@ -31,6 +31,9 @@ export async function startPayment(u: CurrentUser, invoiceId: string) {
   if (inv.kind === "balance" && b.status === "awaiting_payment") throw new DomainError("Please pay the deposit first.");
   if (!["awaiting_payment", "confirmed", "in_progress", "completed"].includes(b.status)) throw new DomainError("This booking is not awaiting payment.");
   const due = inv.amountMinor - inv.paidMinor;
+  // Reuse a recent open attempt (double click, second tab, back button) instead of creating a second payable attempt.
+  const [open] = await db.select().from(s.payments).where(and(eq(s.payments.invoiceId, inv.id), eq(s.payments.initiatedBy, u.id), eq(s.payments.provider, provider), eq(s.payments.status, "initiated"), eq(s.payments.amountMinor, due), sql`${s.payments.createdAt} > now() - interval '2 hours'`)).limit(1);
+  if (open) return { paymentId: open.id, provider };
   const [p] = await db.insert(s.payments).values({ invoiceId: inv.id, provider, amountMinor: due, currency: inv.currency, status: "initiated", initiatedBy: u.id }).returning();
   await db.update(s.payments).set({ providerRef: p.id }).where(eq(s.payments.id, p.id));
   await audit(u.id, "payment.initiate", "payment", p.id, { invoice: inv.number, amountMinor: due, provider });
@@ -72,6 +75,15 @@ export async function applyPaymentEvent(e: VerifiedEvent): Promise<string> {
       return setOutcome("amount_mismatch");
     }
     await tx.update(s.payments).set({ status: "succeeded", confirmedAt: new Date(), updatedAt: new Date(), ...(e.providerRef ? { failureReason: null } : {}) }).where(eq(s.payments.id, p.id));
+    // Lock the invoice: a second attempt that also succeeded at the provider must not be counted twice.
+    const [cur] = (await tx.execute(sql`SELECT paid_minor, amount_minor, booking_id, number FROM invoices WHERE id = ${p.invoiceId} FOR UPDATE`)).rows as { paid_minor: number; amount_minor: number; booking_id: string; number: string }[];
+    if (cur.paid_minor + p.amountMinor > cur.amount_minor) {
+      await tx.update(s.payments).set({ failureReason: "Duplicate: invoice already settled — refund required" }).where(eq(s.payments.id, p.id));
+      await tx.insert(s.bookingEvents).values({ bookingId: cur.booking_id, kind: "note", note: `Duplicate payment of ${formatMoney(p.amountMinor, p.currency)} on ${cur.number} — refund required`, internal: true });
+      await tx.insert(s.tasks).values({ title: `Refund duplicate payment on ${cur.number}`, notes: `Payment ${p.id} (${e.provider}) succeeded after the invoice was already settled. Issue a refund.`, priority: "high", bookingId: cur.booking_id });
+      await audit(null, "payment.duplicate", "payment", p.id, { invoice: cur.number, amountMinor: p.amountMinor }, tx);
+      return setOutcome("duplicate_payment_refund_needed");
+    }
     const [inv] = await tx.update(s.invoices).set({ paidMinor: sql`${s.invoices.paidMinor} + ${p.amountMinor}`, status: sql`CASE WHEN ${s.invoices.paidMinor} + ${p.amountMinor} >= ${s.invoices.amountMinor} THEN 'paid' ELSE 'open' END` }).where(eq(s.invoices.id, p.invoiceId)).returning();
     const [b] = await tx.select().from(s.bookings).where(eq(s.bookings.id, inv.bookingId));
     await tx.insert(s.bookingEvents).values({ bookingId: b.id, kind: "payment", note: `${formatMoney(p.amountMinor, p.currency)} received (${inv.kind}, ${e.provider})`, actorId: null });

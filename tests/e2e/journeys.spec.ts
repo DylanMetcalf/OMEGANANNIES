@@ -141,6 +141,7 @@ test("role boundaries are enforced server-side", async ({ page, request }) => {
 test("@mobile family home and navigation work on a phone", async ({ page }) => {
   await login(page, "family.demo@example.com");
   await expect(page.getByRole("heading", { name: /Good to see you/ })).toBeVisible();
+  await page.waitForFunction(() => document.documentElement.dataset.hydrated === "1"); // the drawer opens via client JS
   await page.getByRole("button", { name: "Menu" }).click();
   await page.getByRole("dialog").getByRole("link", { name: "Bookings" }).click();
   await expect(page).toHaveURL(/\/family\/bookings/);

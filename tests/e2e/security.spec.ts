@@ -79,3 +79,15 @@ test("unauthenticated private endpoints refuse access", async ({ request }) => {
   const r = await request.get("/family", { maxRedirects: 0 });
   expect(r.status()).toBe(307);
 });
+
+test("an expired or revoked session cannot read pages or run actions", async ({ page }) => {
+  await login(page, "family.demo@example.com");
+  await page.goto("/account");
+  await page.waitForFunction(() => document.documentElement.dataset.hydrated === "1");
+  // Revoke the session server-side (as expiry, sign-out elsewhere or suspension would) while the page stays open.
+  await q("delete from sessions where id = (select s.id from sessions s join users u on u.id = s.user_id where u.email = 'family.demo@example.com' order by s.created_at desc limit 1)");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Not signed in" })).toBeVisible();
+  await page.goto("/family");
+  await expect(page).toHaveURL(/\/login/);
+});
