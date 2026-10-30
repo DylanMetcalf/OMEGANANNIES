@@ -21,7 +21,15 @@ export async function GET() {
     const bookings = await db.select().from(s.bookings).where(inArray(s.bookings.familyId, familyIds));
     data.bookings = bookings;
     if (bookings.length) data.invoices = await db.select().from(s.invoices).where(inArray(s.invoices.bookingId, bookings.map((b) => b.id)));
+    data.shortlist = await db.select({ nannyId: s.favourites.nannyId, savedAt: s.favourites.createdAt }).from(s.favourites).where(inArray(s.favourites.familyId, familyIds));
+    data.recentlyViewed = await db.select().from(s.nannyViews).where(inArray(s.nannyViews.familyId, familyIds));
+    data.savedSearches = await db.select({ name: s.savedSearches.name, params: s.savedSearches.params, createdAt: s.savedSearches.createdAt }).from(s.savedSearches).where(inArray(s.savedSearches.familyId, familyIds));
+    data.bookingDraft = await db.select({ params: s.bookingDrafts.params, updatedAt: s.bookingDrafts.updatedAt }).from(s.bookingDrafts).where(inArray(s.bookingDrafts.familyId, familyIds));
+    data.rewardsLedger = await db.select({ kind: s.loyaltyLedger.kind, delta: s.loyaltyLedger.delta, reason: s.loyaltyLedger.reason, note: s.loyaltyLedger.note, createdAt: s.loyaltyLedger.createdAt }).from(s.loyaltyLedger).where(inArray(s.loyaltyLedger.familyId, familyIds));
   }
+  // Calendar connections without tokens; notification preferences and channel consents.
+  data.calendarConnections = await db.select({ provider: s.calendarConnections.provider, accountEmail: s.calendarConnections.accountEmail, status: s.calendarConnections.status, pushBookings: s.calendarConnections.pushBookings, importBusy: s.calendarConnections.importBusy, createdAt: s.calendarConnections.createdAt }).from(s.calendarConnections).where(eq(s.calendarConnections.userId, u.id));
+  data.notificationPreferences = await db.select({ channels: s.notificationPreferences.channels, marketingOptIn: s.notificationPreferences.marketingOptIn, smsConsentAt: s.notificationPreferences.smsConsentAt, whatsappConsentAt: s.notificationPreferences.whatsappConsentAt }).from(s.notificationPreferences).where(eq(s.notificationPreferences.userId, u.id));
   if (nanny) {
     const { internalNotes: _internal, ...profile } = nanny;
     data.nannyProfile = profile;
@@ -29,7 +37,7 @@ export async function GET() {
     data.availability = await db.select().from(s.availabilityRules).where(eq(s.availabilityRules.nannyId, nanny.id));
   }
   data.messagesSent = await db.select({ id: s.messages.id, conversationId: s.messages.conversationId, body: s.messages.body, createdAt: s.messages.createdAt }).from(s.messages).where(eq(s.messages.senderId, u.id));
-  data.notifications = await db.select({ subject: s.notifications.subject, createdAt: s.notifications.createdAt }).from(s.notifications).where(or(eq(s.notifications.userId, u.id)));
+  data.notifications = await db.select({ subject: s.notifications.subject, channel: s.notifications.channel, status: s.notifications.status, createdAt: s.notifications.createdAt }).from(s.notifications).where(or(eq(s.notifications.userId, u.id)));
   await audit(u.id, "privacy.export", "user", u.id);
   return new Response(JSON.stringify(data, null, 2), { headers: { "Content-Type": "application/json", "Content-Disposition": `attachment; filename="omega-my-data-${new Date().toISOString().slice(0, 10)}.json"`, "Cache-Control": "no-store" } });
 }

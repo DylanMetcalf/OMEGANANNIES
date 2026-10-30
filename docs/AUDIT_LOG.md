@@ -1,6 +1,6 @@
 # Audit log
 
-Five progressive audit-and-improvement cycles. Each finding records evidence, root cause, remediation and the test that now guards it. Severity: Critical · High · Medium · Low · Info.
+Eight audit-and-improvement cycles (1–5 in the first phase; 6–8 in the final refinement phase). Each finding records evidence, root cause, remediation and the test that now guards it. Severity: Critical · High · Medium · Low · Info.
 
 | Cycle | Focus | Findings | Fixed | Open |
 |---|---|---|---|---|
@@ -9,6 +9,9 @@ Five progressive audit-and-improvement cycles. Each finding records evidence, ro
 | 3 | Design, UI/UX & accessibility | 9 | 9 | 0 |
 | 4 | End-to-end operations & edge cases | 9 | 8 | 1 (documented) |
 | 5 | Independent production-readiness review | 9 | 6 | 3 (documented, need external services) |
+| 6 | Booking experience & functional integration | 11 | 11 | 0 |
+| 7 | Security, integrations & operational reliability | 14 | 13 | 1 (accepted, documented) |
+| 8 | Independent product & production-readiness review | 8 | 5 | 3 (need external services or reviews) |
 
 ## 1. Audit 1 — Baseline functionality and implementation integrity
 
@@ -128,3 +131,67 @@ Website re-import is idempotent (re-running creates nothing new) and never overw
 7. Get a legal review of the privacy notice and retention periods.
 8. Do a screen-reader pass.
 9. Have Omega confirm rates and policies.
+
+## 6. Audit 6 — Booking experience and functional integration
+
+**Method:** walked the complete new journey as a first-time family on desktop and on a Pixel-7 viewport. That covered the dashboard, requirements, discovery, filters, preview, full profile, shortlist, compare, preferences, review, submission and the progress tracker, and then the same request from management's side. Screenshot review of every new page; axe-core on 17 new or changed pages at both sizes.
+**Evidence:** rewritten E2E journey (requirements validation → discovery → search → preview drawer → shortlist → compare → select → rank preferences → submit → management sees ranked preferences → offer → quote → payment); new `@mobile` test for the centre action and touch shortlisting; a11y suite 9/9 after fixes.
+
+| ID | Sev | Module | Evidence | Root cause | Remediation | Test | Result |
+|---|---|---|---|---|---|---|---|
+| A6-01 | High | Profiles | “Police clearance verified” etc. were printed for every published nanny | Static list, not data — a check can expire after approval | Vetting badges come from current, in-date check records only | Integration (profile) + visual | Fixed |
+| A6-02 | Medium | Journey | Selecting a nanny who was unpublished meanwhile showed an error page | Unhandled DomainError in a redirecting action | Returns to results with a clear notice | Code review | Fixed |
+| A6-03 | Medium | Step 1 | “Save for later” showed “Finding nannies…” | One pending label for two intents | Intent-specific pending labels | Visual | Fixed |
+| A6-04 | Medium | Mobile | The centre action (“Find a nanny”) sat over step 1's sticky submit bar and skipped the questions | Contextual rule too broad | Hidden on steps 1 and 3 (they have their own action bar) | E2E `@mobile` | Fixed |
+| A6-05 | Low | Discovery | Opening a preview gave no feedback for ~300 ms | Server-rendered drawer, no pending state | `LinkPending` overlay on card links | Visual | Fixed |
+| A6-06 | Medium | Cards | Without photos, 4:5 cards were very tall; initials overflowed small tiles | Fixed font size; ratio chosen for photos | 4:3 cards; monogram scales with its container (`cqw`) | Visual | Fixed |
+| A6-07 | Serious (WCAG 2.5.3) | Cards | axe `label-content-name-mismatch` on photo links | Duplicate link labelled “Preview X” showing initials | Photo link removed from tab order; name link carries the label | a11y spec | Fixed |
+| A6-08 | Serious (WCAG 1.3.1) | Review | axe `definition-list`/`dlitem` | Edit link inside `<dl>` grouping | `dt` + `dd` only; link moved inside `dd` | a11y spec | Fixed |
+| A6-09 | Serious (WCAG 2.5.3) | Mobile action | Label “Shortlist, 2 saved” vs visible “2 Shortlist” | aria-label override | Visible label + screen-reader-only count | a11y spec (mobile) | Fixed |
+| A6-10 | Serious (WCAG 2.4.4) | Journey steps | Completed steps on phones were links with no name | Label hidden with `display:none` | `sr-only` on small screens | a11y spec (mobile) | Fixed |
+| A6-11 | Low | Drawer | On phones the close button got a heavy focus ring on open | Native dialog auto-focus | The sheet itself takes focus | Visual | Fixed |
+
+## 7. Audit 7 — Security, integrations and operational reliability
+
+**Method:** negative tests with test accounts against the new server actions and routes (mocked session, real Postgres); a fake calendar provider to exercise OAuth tokens, pushes, incoming changes, conflicts, revocation and webhooks; HTTP-level attempts against redirects, webhooks and exports.
+**Evidence:** `tests/integration/features.test.ts` (18 tests), `tests/unit/journey-and-platform.test.ts` (16), 2 new E2E security tests; all green.
+
+| ID | Sev | Module | Attempt / evidence | Root cause | Remediation | Test | Result |
+|---|---|---|---|---|---|---|---|
+| A7-01 | Medium | Calendar | Two simultaneous syncs of one booking created duplicate external events | Check-then-create race | Session row is claimed (unique key) before the provider call; in-flight claims are skipped | Integration (concurrent `syncBooking`) | Fixed |
+| A7-02 | Medium | Payments | Re-recording an EFT with the same bank reference surfaced a raw database error | Unique index hit without a pre-check | Clear “already recorded” message | Integration | Fixed |
+| A7-03 | — | Journey | Submit with another family's shortlist nanny, an unpublished nanny, a different service/date in the form | — | Requirements read from the server-side draft; preferences re-validated against this family's shortlist and published profiles | Integration | Verified |
+| A7-04 | — | Journey | Requirements naming another household's child | — | Dropped server-side | Integration | Verified |
+| A7-05 | — | Shortlist | Toggle across families / unpublished profiles | — | Scoped to the signed-in family; unpublished refused; rate limited | Integration | Verified |
+| A7-06 | — | Redirects | `/login?next=//evil.example`, `/start?intent=https://evil…`, backslash and encoded variants | — | `safeNext` allows only same-origin portal paths fitting the user's role | Unit + E2E | Verified |
+| A7-07 | — | Calendar | Plain-text tokens; forged webhook; private event details | — | AES-256-GCM tokens; per-channel secret (SHA-256 stored) verified in constant time; busy blocks store times only | Integration | Verified |
+| A7-08 | — | Calendar | Outside move/delete of an Omega event | — | Conflict + task; booking unchanged; restore re-writes; no repeat conflict | Integration | Verified |
+| A7-09 | — | Calendar | Revoked access | — | Connection marked “reconnect needed”; refresh used when expired | Integration | Verified |
+| A7-10 | — | Notifications | SMS without consent; duplicate events; “delivered” before confirmation | — | Channel needs number + consent; dedupe key; delivered only on signed callback and never regresses | Unit + integration | Verified |
+| A7-11 | — | Webhooks | Unsigned Twilio/Resend/Google/Microsoft callbacks | — | 401 | Unit (signatures) + E2E | Verified |
+| A7-12 | — | Referrals/loyalty | Self-referral; rewards while off; replayed completion; ops approving; negative balance | — | Blocked/flagged; nothing while off; idempotent ledger; payments permission; balance check | Integration | Verified |
+| A7-13 | — | Analytics | Family calling insights/growth/export; PII in aggregates | — | 404 / forbidden; aggregates contain no emails or children | E2E + integration | Verified |
+| A7-14 | Low | Microsoft webhook | Validation handshake echoes a token | Required by Graph | `text/plain`, length-capped, `nosniff` | Code review | **Accepted** |
+
+## 8. Audit 8 — Independent product and production-readiness review
+
+**Method:** fresh review of the whole product and handover: configuration, privacy rights for the new data, performance, PWA, documentation and the pitch deck (every slide rendered and inspected, the final slide specifically).
+**Evidence:**
+- Unit + integration: **87/87**.
+- Playwright: **32/32** (journeys, security, accessibility; desktop + mobile).
+- Lint 0 warnings; typecheck clean; `npm audit --omit=dev` 0 vulnerabilities.
+- Median server response: discovery 60 ms, family home 127 ms, insights 46 ms (demo data, local).
+
+| ID | Sev | Module | Evidence | Root cause | Remediation | Result |
+|---|---|---|---|---|---|---|
+| A8-01 | Medium | Configuration | No start-up warnings for the new integrations | Guard predated them | Warnings for calendar key, Resend webhook secret; fatal if Twilio is configured without its auth token | Fixed |
+| A8-02 | Medium | POPIA | Data export lacked shortlist, views, saved searches, draft, rewards, calendar connections, channel consents | New personal data added after the export was written | Export extended (tokens never included) | Fixed |
+| A8-03 | Medium | Pitch deck | Previous deck stretched photos (final slide most visibly) | Images placed with frame-sized `cover` sizing without the source dimensions | Every image is pre-cropped by sharp to the frame's exact ratio; founders photo now in a landscape frame at its native 5:4 ratio; all 19 slides inspected | Fixed |
+| A8-04 | Low | Handover | `.env.example` lacked the new variables | — | Added with comments | Fixed |
+| A8-05 | Info | Performance | Discovery loads ≤ 500 profiles and checks availability in 3 indexed queries; photos resized server-side (160/480/960 WebP) | — | Fine for Omega's scale; revisit beyond ~2 000 nannies | Noted |
+| A8-06 | Medium | Integrations | Google/Microsoft calendars, Twilio SMS/WhatsApp, Resend delivery webhooks never exercised against the real providers | No accounts or credentials (none invented) | Fully implemented and tested with fakes/signature fixtures; Administration shows real status | **Open — needs Omega's accounts** |
+| A8-07 | Medium | Carried | ClamAV not configured; CSP `'unsafe-inline'`; no external penetration test or legal review | External services / reviews | Documented | **Open** |
+| A8-08 | Low | Business | Referral/loyalty terms, WhatsApp templates, rates and policies | Omega's decisions | Programmes ship off; settings ready | **Open — decisions** |
+
+### Readiness verdict (after Audit 8)
+**Feature-complete and tested; not yet production-ready.** Remaining blockers are external: accounts (hosting, PayFast, Resend, Twilio, Google/Microsoft OAuth apps, Supabase, ClamAV), Omega's policy decisions, a penetration test, a privacy-notice review and a screen-reader pass.

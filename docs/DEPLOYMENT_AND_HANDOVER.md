@@ -66,3 +66,17 @@ Restore the database from point-in-time backup; files from bucket versioning. Ro
 - **Decisions needed:** see PRODUCT_SPECIFICATION §9 and DISCOVERY §6.
 - **Before real users:** clear all Administration warnings; run a PayFast sandbox payment end to end; send real test emails; run a penetration test; get a legal review of the privacy notice and retention; do a screen-reader check.
 - **Status and open defects:** PROJECT_STATUS.md and KNOWN_LIMITATIONS.md.
+
+## Final refinement phase — extra set-up
+1. Run migrations `0004`–`0006` (`npm run db:migrate`).
+2. Point the website's buttons at `/start?intent=book&service=<slug>`, `/start?intent=find`, `/start?intent=login`, `/start?intent=nanny-login` and `/start?intent=account`.
+3. Optional integrations (see INTEGRATIONS.md):
+   - Google and Microsoft OAuth apps plus `CALENDAR_TOKEN_KEY`;
+   - Twilio (SMS/WhatsApp) with status-callback URL `$APP_URL/api/notifications/twilio`;
+   - the Resend webhook secret.
+4. The hourly job (`/api/cron/daily`) now also:
+   - sends 24-hour booking reminders;
+   - renews calendar webhooks, polls stale calendars and retries failed calendar writes;
+   - purges ended busy periods.
+5. Referrals and loyalty: set terms in **Management → Referrals & loyalty**, then switch them on.
+6. Updated deck: `deliverables/Omega_Nannies_Final_Platform_Pitch_Deck.pptx` / `.pdf`. Screenshots are in `docs/screenshots/`.

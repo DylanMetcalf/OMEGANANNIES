@@ -74,3 +74,38 @@ Publishing requires approval.
 
 ## 9. Business decisions still open
 See [DISCOVERY.md §6](DISCOVERY.md): rates (the website shows two conflicting price sets), deposit %, cancellation fees, holiday, overnight and travel fees, refund policy, nanny compensation, retention, payment provider account, and whether unpaid holds auto-release (currently they are flagged to management after 48 h and never cancelled automatically).
+
+## 10. Final refinement phase — what changed (Built unless marked)
+- **Guided booking journey** (`/family/book` → `/family/book/nannies` → `/family/book/review`):
+  1. *Your needs*: service, one day / several days / weekly pattern, times, area (not the address), children or age groups, optional languages, driving, specialist care, minimum experience and notes. Conditional questions; validation; "Save for later".
+  2. *Choose nannies*: photo-led grid of approved profiles with real availability for the requested sessions (holds, time off, synced calendar busy times). It has:
+     - search, sort, an expandable filter panel and active-filter chips;
+     - result count and pagination;
+     - saved searches (no alerts) and recently viewed;
+     - a profile preview drawer that keeps the grid, filters and page.
+  3. *Review & send*:
+     - Rank up to three preferred nannies, or "Ask Omega to suggest someone" (this creates a management task).
+     - Summary with edit links and an indicative price estimate from the published price book.
+     - Address chosen only here.
+     - Terms. Then the request is sent: never confirmed or charged automatically.
+- **All entry points share the journey:**
+  - "Book a nanny" (sidebar and phone centre action) and "Find a nanny".
+  - The dashboard, a saved nanny's "Select" button, "Book again" (copies preferences only).
+  - Website links via `/start?intent=book&service=<slug>`.
+  - The old URLs, which redirect.
+  - The draft is stored server-side, so "Continue booking" works on any device.
+- **Full profile:** sections 1–9 (introduction, experience, qualifications from current check records, skills, languages, relevant childcare experience, availability, reviews, other). Reviews are verified and moderated; an average is shown only from 3+ reviews; families can report a review.
+- **Shortlist** (persistent, per family) and **comparison** (2–4 nannies, public facts only).
+- **Progress tracker** from the real booking state: request received → preferences submitted → Omega reviewing → nanny confirming → quotation → your approval → deposit → confirmed. Each stage has a "what happens next" line.
+- **My Family** replaces Household + Children: Household (incl. emergency contact), Children, Addresses, Household members.
+- **Family dashboard:** attention cards (quotes, payments, unfinished request, profile completion, messages), upcoming care, requests in progress, shortlist / recently viewed, updates, support.
+- **Website ↔ portal:** website links in the sidebar and mobile menu; `/start` entry route; safe `next=` after sign-in.
+- **Primary CTA:** brighter gold (`cta` #9F6A00, white text 4.63:1) with hover/active/disabled/busy states. **Phone:** a raised, role-aware centre action:
+  - Family: "Book a nanny" or "Continue booking"; "Shortlist" while browsing.
+  - Nanny: "Review offer" or "My availability".
+  - Management: "New requests".
+- **Welcome moment** once after sign-in (≈1 s, dismissible, reduced-motion aware); pending/skeleton feedback; restrained motion.
+- **Two-way calendar sync** (Google, Outlook) — *Built; needs OAuth app credentials.*
+- **Multi-channel notifications** (in-app, email, SMS, WhatsApp) with a preference matrix — *SMS/WhatsApp need Twilio; WhatsApp needs approved templates.*
+- **Referrals & loyalty** — *Built, switched off until Omega approves terms.*
+- **Management insights** (`/manage/insights`) with filters and CSV export.

@@ -40,3 +40,13 @@ Both fonts are self-hosted at build time through `next/font`: no runtime request
 - On phones, the primary actions on detail pages come before the details.
 - Brand photography from the public site appears on the landing and sign-in pages only.
 - Nanny photos are shown only to roles allowed to see that profile (`/api/photos/[id]`).
+
+## Final refinement additions
+- **CTA token** `cta` #9F6A00 / `cta-600` #8C5C00 (hover) / `cta-700` #7A5000 (pressed): white text ≥ 4.63:1. `btn-cta` is the single treatment for "Book a nanny" style actions, with a warm shadow, a busy state (`aria-busy`) and a disabled state. The old `btn-gold` is retired.
+- **Motion:** `animate-pop` (shortlist confirmation), `animate-rise` (drawers, confirmations), `grow` (welcome progress), `skeleton` shimmer. All are off under `prefers-reduced-motion`. `card-link` gives a gentle lift on clickable cards.
+- **Components:**
+  - `NannyPhoto`: fixed aspect, `object-cover` with a face-biased focal point, responsive `srcset` (160/480/960 WebP from the server). Without a photo it shows a scaled monogram.
+  - `DiscoverCard`, `ShortlistButton` (optimistic, honest revert on failure), `AvailabilityPill`, `Rating` (average only from 3+).
+  - `ProfileDrawer` (side drawer, bottom sheet on phones), `JourneySteps`, `ProgressTracker`, `LinkPending`.
+  - `BarList` and `Columns` charts: single series, the `info` hue validated against the surface, values on hover and in a table.
+- **Navigation:** the phone tab bar is three destinations + a raised role-aware centre action + More (safe-area aware, 56 px target). Website links sit in the sidebar footer and the mobile menu, keeping the main navigation uncluttered.

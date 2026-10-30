@@ -36,3 +36,13 @@ src/
 **PWA.** `app/manifest.ts`, generated icons, and `public/sw.js`, which caches **static assets only**. Navigations are network-only with an offline fallback page, so no personal data is ever cached on the device. An update prompt appears when a new version is deployed.
 
 **UI layer.** Server Components render data; mutations are Server Actions wrapped by `ActionForm` (progressive enhancement, input preserved on error, toasts). Design tokens and components: see DESIGN_SYSTEM.md.
+
+## Final refinement phase
+- `lib/journey-core.ts` (pure, unit-tested: requirements parsing and validation, filtering and ranking, availability classification, preference ordering, comparison rows) and `lib/journey.ts` (draft, discovery queries, availability, estimate). Journey server actions are in `app/family/journey-actions.ts`. Requirements always come from the server-side draft at submission.
+- `lib/booking-progress.ts` derives the family tracker from booking state. `lib/booking-hooks.ts` runs side effects **after commit** (calendar sync, growth), never inside the booking transaction.
+- `lib/calendar/providers.ts` (Google and Microsoft adapters behind one interface, with a test seam) and `lib/calendar/sync.ts` (encrypted tokens, PKCE OAuth, push per session with claim-before-create, incremental pull, busy blocks, conflicts, webhooks, maintenance). Routes: `/api/calendar/{connect,oauth}/[provider]` and `/api/calendar/webhook/{google,microsoft}`.
+- `lib/channels.ts` (consent and channel rules, phone normalisation, retry schedule); `lib/notify.ts` (templates, multi-channel queue, Resend and Twilio delivery); `lib/webhook-signatures.ts`; routes `/api/notifications/{twilio,resend}`.
+- `lib/growth.ts` (codes, attribution, append-only ledger, approvals); `/r/[code]`; settings `referral`/`loyalty` in `lib/settings.ts`.
+- `lib/insights.ts` (aggregates only) feeds `/manage/insights` and `/api/reports/insights`.
+- `lib/site.ts` (website links, `safeNext`, entry intents) and `/start`.
+- Migrations `0004`–`0006`: drafts, saved searches, views, preferences on bookings, review reports, notification delivery fields, calendar tables, referrals, ledger.

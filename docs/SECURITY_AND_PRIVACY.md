@@ -59,3 +59,22 @@ See AUDIT_LOG.md (Audits 2, 4 and 5) for each attack attempted and the test that
 - Add error monitoring (e.g. Sentry) and run `npm audit` in CI.
 - Get a legal review of the privacy notice, retention periods and message-oversight policy.
 - Do a penetration test before go-live.
+
+## Final refinement phase
+- **Journey integrity:** requirements are read from the server-side draft; preferences are re-validated against the family's own shortlist and published profiles; other households' children are dropped; prices are computed server-side (the estimate is labelled indicative).
+- **Addresses:** discovery uses an area only. The address is chosen at review and revealed to the nanny only from Omega's configured point.
+- **Shortlists, saved searches, recently viewed, drafts:** scoped to the family; included in the POPIA export.
+- **Redirects:** `safeNext()` accepts only same-origin portal paths that fit the user's role; `/start` maps fixed intents. No tokens ever travel in links between the website and the portal (separate domains, separate cookies).
+- **Calendar:**
+  - Minimal scopes (calendar events + email); PKCE plus a signed, user-bound state cookie.
+  - Tokens encrypted with AES-256-GCM (`CALENDAR_TOKEN_KEY`).
+  - Per-channel webhook secrets stored as hashes and compared in constant time.
+  - Busy blocks keep start/end only. Outside edits never change bookings.
+  - Disconnecting removes Omega's events and all stored data.
+- **Notifications:**
+  - SMS/WhatsApp require a number plus explicit consent per channel, and consent resets when the number changes.
+  - Security notices can't be switched off; marketing is opt-in.
+  - Short texts carry no addresses, child details or IDs.
+  - Delivery is confirmed only by signed provider callbacks (Twilio HMAC-SHA1, Resend/Svix HMAC-SHA256 with timestamp tolerance).
+- **Referrals & loyalty:** off by default; self-referral blocked; suspicious patterns flagged; append-only ledger with idempotent awards; approvals and adjustments need `payments.manage` and are audited; balances can't go negative.
+- **Analytics:** `reports.view` required; commercial figures need `payments.manage`; exports are aggregates without personal data and are audited.

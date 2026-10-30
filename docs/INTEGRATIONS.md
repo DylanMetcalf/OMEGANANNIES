@@ -26,3 +26,15 @@ Every integration reports its real status in **Administration → Integrations**
 | Rates | /rates vs service pages (conflicting) | Draft price book; **needs Omega's confirmation** |
 
 No private pages were accessed and no authentication was bypassed. Website claims (for example "police-clearance verified") are **not** turned into verification records.
+
+## Final refinement phase
+| Integration | What it does | Status | To activate |
+|---|---|---|---|
+| Google Calendar | Two-way: bookings out (one event per care day), busy times in, webhooks (`events.watch`), incremental sync tokens | Built; tested with a fake provider | Google Cloud OAuth client (scopes `openid email calendar.events`), redirect `$APP_URL/api/calendar/oauth/google`, `GOOGLE_CLIENT_ID/SECRET`, `CALENDAR_TOKEN_KEY` |
+| Outlook / Microsoft 365 | Same via Microsoft Graph (`Calendars.ReadWrite`, delta queries, subscriptions renewed every ~2.5 days) | Built; tested with a fake provider | Azure app registration, redirect `$APP_URL/api/calendar/oauth/microsoft`, `MICROSOFT_CLIENT_ID/SECRET/TENANT_ID` |
+| Twilio SMS | Short booking texts with signed status callbacks | Built; signature verification unit-tested | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` or `TWILIO_MESSAGING_SERVICE_SID` |
+| Twilio WhatsApp | Same channel model | Built | WhatsApp-enabled sender (`TWILIO_WHATSAPP_FROM`) **and Meta-approved templates** for business-initiated messages |
+| Resend delivery webhooks | Marks emails delivered or bounced | Built; Svix verification unit-tested | `RESEND_WEBHOOK_SECRET`, webhook URL `$APP_URL/api/notifications/resend` |
+| Website entry links | `/start?intent=book|find|login|nanny-login|account&service=<website slug>` and `/r/<CODE>` | Built | Point the website's buttons at these URLs |
+
+Calendar and messaging providers were **not** contacted from this environment, and no credentials were created or assumed.

@@ -17,6 +17,9 @@ export function configProblems(e: NodeJS.ProcessEnv = process.env): { fatal: str
     if (!e.CLAMAV_HOST) warnings.push("No malware scanner configured: uploaded documents are marked “not scanned”.");
     if (!e.CRON_SECRET) warnings.push("CRON_SECRET not set: reminders, expiry and retention jobs cannot run.");
     if (e.PAYFAST_MERCHANT_ID && e.PAYFAST_SANDBOX !== "false") warnings.push("PayFast is in sandbox mode.");
+    if ((e.GOOGLE_CLIENT_ID || e.MICROSOFT_CLIENT_ID) && !e.CALENDAR_TOKEN_KEY) warnings.push("Set CALENDAR_TOKEN_KEY so calendar tokens survive an APP_SECRET rotation.");
+    if (e.RESEND_API_KEY && !e.RESEND_WEBHOOK_SECRET) warnings.push("RESEND_WEBHOOK_SECRET not set: emails can be sent but never confirmed as delivered.");
+    if (e.TWILIO_ACCOUNT_SID && !e.TWILIO_AUTH_TOKEN) fatal.push("TWILIO_AUTH_TOKEN is required to verify SMS/WhatsApp delivery callbacks.");
   }
   return { fatal, warnings };
 }

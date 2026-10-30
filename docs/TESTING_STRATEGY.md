@@ -20,3 +20,15 @@ E2E runs only against a database in which every user is `is_demo`. The harness c
 
 ## Not covered automatically (manual or external)
 Screen readers (NVDA/VoiceOver), real email delivery, live PayFast sandbox, Supabase Storage, ClamAV, load testing, penetration testing. See KNOWN_LIMITATIONS.md.
+
+## Final refinement phase
+- **Unit** `tests/unit/journey-and-platform.test.ts`: requirement parsing and validation, filtering, ranking and sorting, pagination, availability classification, preference ordering, comparison fields, progress stages, phone normalisation, channel/consent rules, retry back-off, Twilio and Svix signatures, safe redirects and entry intents.
+- **Integration** `tests/integration/features.test.ts` (real Postgres, mocked session):
+  - shortlist ownership, requirement validation, draft-only submission with tampered preferences, assistance tasks, the availability refusal and preference ranking in matching;
+  - calendar sync with a fake provider: encryption, per-session events, concurrent syncs, privacy, conflicts and restore, busy import and removal, cancellation, token refresh and revocation, webhook secrets;
+  - the duplicate EFT reference;
+  - notification consent, dedupe, capture and callback-only delivery;
+  - referral and loyalty switches, approval permissions, idempotency and negative balances;
+  - insights aggregates.
+- **E2E:** the family journey rewritten for the guided flow; mobile centre action and touch shortlisting; cross-domain redirect and webhook/export refusals; axe on 39 pages (incl. 8 new) at desktop and phone size.
+- **Latest:** 87/87 unit and integration tests, 32/32 Playwright tests.

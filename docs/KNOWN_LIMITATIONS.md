@@ -25,3 +25,12 @@ These are stated plainly. None of them is hidden in the UI: Administration shows
 - No load testing, penetration test or screen-reader (NVDA/VoiceOver) pass has been carried out.
 - Error monitoring (e.g. Sentry) is not wired in.
 - The offline mode shows an offline page only; no data is available offline (by design, for privacy).
+
+## Added in the final refinement phase
+- **Calendar sync, SMS, WhatsApp and email delivery confirmations** are implemented and tested with fakes and signature fixtures, but have never run against Google, Microsoft, Twilio or Resend (no accounts). WhatsApp business-initiated messages need Meta-approved templates. Until then, message bodies are sent only inside the 24-hour customer window.
+- **Calendar sync** writes to the user's primary calendar (no calendar picker yet). Outside edits are surfaced as conflicts, not applied.
+- **Demo nanny profiles have no photographs** (the approved demo profiles are synthetic; the 17 real website photos belong to unverified draft profiles and are not shown to families). Cards show a monogram until real, approved photos are added.
+- **Price estimates** in the journey are indicative; holiday, travel and overnight fees are confirmed in the quotation.
+- **Referral and loyalty programmes** are off; redemptions are recorded manually until Omega defines how credit and points are used.
+- **Saved searches** never trigger alerts (by design until consent and rules are agreed).
+- **Discovery** loads up to 500 published profiles per request; revisit with server-side pagination if the network grows beyond ~2 000 nannies.
