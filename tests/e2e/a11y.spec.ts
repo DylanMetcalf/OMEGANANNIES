@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { resetLoginLimits } from "./limits";
 
 /** Audit 3 — automated WCAG 2.2 AA checks (axe-core) across every role. Fails on serious/critical issues. */
 const PAGES: Record<string, string[]> = {
@@ -8,6 +9,7 @@ const PAGES: Record<string, string[]> = {
   "nanny.demo@example.com": ["/nanny", "/nanny/bookings", "/nanny/availability", "/nanny/profile", "/nanny/documents", "/nanny/onboarding"],
   "admin.demo@example.com": ["/manage", "/manage/bookings", "/manage/nannies", "/manage/families", "/manage/tasks", "/manage/pricing", "/manage/reports", "/manage/content", "/manage/support", "/manage/admin"],
 };
+test.beforeEach(resetLoginLimits);
 async function login(page: Page, email: string) {
   await page.goto("/login");
   await page.waitForFunction(() => document.documentElement.dataset.hydrated === "1");

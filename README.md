@@ -16,19 +16,24 @@ npm run build && npm start   # http://localhost:3000
 ```
 Demo logins (password `OmegaDemo2026!`): `family.demo@`, `family2.demo@`, `nanny.demo@`, `manager.demo@`, `ops.demo@`, `admin.demo@example.com`. All demo data is synthetic and flagged `is_demo`. The seed refuses to run against a database containing real users.
 
+## Nanny onboarding in one paragraph
+Omega creates a profile, or imports it from omeganannies.com or a CSV, **before the nanny has a login**. Every field records its source and whether Omega has verified it. Staff add a contact email and send an invitation: a single-use, 7-day, revocable link that only works with that email address. The nanny claims the profile, sets a password, confirms their details, uploads ID, police clearance and first aid documents and a photo, and submits it for review. Omega records the five safeguarding checks, reviews the documents, then approves and publishes the profile. Only published profiles are visible to families.
+
 ## Tests
 ```bash
 npm run typecheck && npm run lint
-TEST_DATABASE_URL=postgres://…/omega_test npm test   # 21 unit + 8 integration (real Postgres)
-npm run test:e2e                                      # 7 Playwright journeys against the running demo
+TEST_DATABASE_URL=postgres://…/omega_test npm test   # unit + integration against real Postgres
+npm run test:e2e   # Playwright journeys, security and accessibility against the running demo
 ```
-Latest results: typecheck clean, lint clean, **29/29** unit and integration tests, **7/7** E2E (desktop + mobile).
+Latest results: typecheck clean, lint clean, **53/53** unit and integration tests, **29/29** Playwright tests (desktop and mobile), 0 serious/critical axe violations, `npm audit` 0. See [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
 
 ## Screenshots
 Real screenshots of the demo environment are in [docs/screenshots](docs/screenshots).
 
 ## Documentation
-[Audit](docs/AUDIT.md) · [Architecture](docs/ARCHITECTURE.md) · [Security & privacy](docs/SECURITY.md) · [Deployment & readiness matrix](docs/DEPLOYMENT.md) · [Reporting definitions](docs/REPORTING.md) · [Self-audit](docs/SELF-AUDIT.md) · [Implementation log](docs/IMPLEMENTATION_LOG.md)
+[Project status](docs/PROJECT_STATUS.md) · [Product specification](docs/PRODUCT_SPECIFICATION.md) · [Architecture](docs/ARCHITECTURE.md) · [Design system](docs/DESIGN_SYSTEM.md) · [Data model](docs/DATA_MODEL.md) · [Security & privacy](docs/SECURITY_AND_PRIVACY.md) · [Integrations](docs/INTEGRATIONS.md) · [Testing strategy](docs/TESTING_STRATEGY.md) · [Audit log](docs/AUDIT_LOG.md) · [Known limitations](docs/KNOWN_LIMITATIONS.md) · [Deployment & handover](docs/DEPLOYMENT_AND_HANDOVER.md) · [Discovery](docs/DISCOVERY.md) · [Reporting definitions](docs/REPORTING.md)
+
+**Pitch deck:** [deliverables/Omega_Nannies_Platform_Pitch_Deck.pptx](deliverables/Omega_Nannies_Platform_Pitch_Deck.pptx) (PDF alongside).
 
 ## Decisions Omega needs to make
-Confirm rates (the website has two conflicting price sets), deposit %, cancellation fees, public-holiday, overnight and travel fees, the refund policy, nanny compensation model, retention periods, and the payment provider account. Each is listed in [docs/AUDIT.md §6](docs/AUDIT.md).
+Confirm rates (the website has two conflicting price sets), deposit %, cancellation fees, public-holiday, overnight and travel fees, the refund policy, nanny compensation model, retention periods, and the payment provider account. Each is listed in [docs/DISCOVERY.md §6](docs/DISCOVERY.md).

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { resetLoginLimits } from "./limits";
 
 /** Runs against the DEMO environment (npm run db:seed:demo). Exercises the real UI, server actions and database. */
 const PW = "OmegaDemo2026!";
@@ -6,6 +7,7 @@ const stamp = Date.now().toString(36);
 const famEmail = `e2e-${stamp}@example.com`;
 let bookingUrl = "";
 
+test.beforeEach(resetLoginLimits);
 async function login(page: Page, email: string, password = PW) {
   await go(page, "/login");
   await page.getByLabel("Email").fill(email);

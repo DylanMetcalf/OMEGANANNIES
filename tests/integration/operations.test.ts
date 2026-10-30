@@ -153,3 +153,20 @@ describe("payment retries", () => {
     await expect(startPayment(famA, inv.id)).rejects.toThrow(/not payable/);
   });
 });
+
+describe("maintenance job", () => {
+  it("flags an unpaid hold once and rejects unauthenticated calls", async () => {
+    const { GET } = await import("@/app/api/cron/daily/route");
+    process.env.CRON_SECRET = "test-cron-secret";
+    expect((await GET(new Request("http://x/api/cron/daily"))).status).toBe(401);
+    const { b, q } = await quoted(famA, familyA, childA, nanny1, nanny1U, 360);
+    await acceptQuotation(famA, q.id, true);
+    await db.update(s.quotations).set({ acceptedAt: new Date(Date.now() - 72 * 3600_000) }).where(eq(s.quotations.id, q.id));
+    const call = () => GET(new Request("http://x/api/cron/daily", { headers: { authorization: "Bearer test-cron-secret" } }));
+    expect(((await (await call()).json()) as { unpaidHoldsFlagged: number }).unpaidHoldsFlagged).toBeGreaterThanOrEqual(1);
+    await call(); // second run must not duplicate the task
+    const t = await db.select().from(s.tasks).where(and(eq(s.tasks.bookingId, b.id), sql`${s.tasks.title} like 'Unpaid hold%'`));
+    expect(t.length).toBe(1);
+    expect((await db.select().from(s.bookings).where(eq(s.bookings.id, b.id)))[0].status).toBe("awaiting_payment"); // never auto-cancelled
+  });
+});

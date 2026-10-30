@@ -8,7 +8,7 @@ Five progressive audit-and-improvement cycles. Each finding records evidence, ro
 | 2 | Security, privacy & data integrity | 12 | 11 | 1 (documented) |
 | 3 | Design, UI/UX & accessibility | 9 | 9 | 0 |
 | 4 | End-to-end operations & edge cases | 9 | 8 | 1 (documented) |
-| 5 | Independent production-readiness review | see §5 | | |
+| 5 | Independent production-readiness review | 9 | 6 | 3 (documented, need external services) |
 
 ## 1. Audit 1 — Baseline functionality and implementation integrity
 
@@ -91,3 +91,40 @@ Keyboard-only sign-in, skip link and visible focus are covered by an automated t
 | A4-09 | — | Sessions | Session revoked (expiry, “sign out others”, suspension) while a page is open | — | Next action returns “Not signed in”; next navigation redirects to `/login` | E2E security | Verified |
 
 Website re-import is idempotent (re-running creates nothing new) and never overwrites fields edited by Omega or a nanny, or fields that have been verified (both tested). CSV quoting and blank lines are handled.
+
+## 5. Audit 5 — Independent production-readiness review
+
+**Method:** reviewed the system as an outside reviewer deciding whether real families' and children's data could go live. Covered: configuration and boot behaviour, secrets, headers and cookies, scheduled jobs, unbounded data growth, operational dead-ends, documentation, and a clean full run of every suite.
+**Evidence:**
+- Typecheck clean; lint 0 warnings.
+- Unit + integration **53/53**.
+- Playwright **29/29** (journeys, security, accessibility; desktop and mobile).
+- `npm audit --omit=dev` → 0 vulnerabilities.
+- `git ls-files` shows only `.env.example`; no key patterns in tracked files.
+- Session cookie is `httpOnly`, `SameSite=Lax`, and `Secure` in production. CSP, HSTS (2 years, preload), `frame-ancestors 'none'` and no `X-Powered-By` header.
+- The cron endpoint returns 401 without the bearer token (tested).
+
+| ID | Sev | Module | Evidence | Root cause | Remediation | Test | Result |
+|---|---|---|---|---|---|---|---|
+| A5-01 | High | Booking operations | A family that accepts a quote and never pays holds the nanny indefinitely, and no one is told | No follow-up on `awaiting_payment` | Hourly job creates one high-priority "Unpaid hold" task after 48 h (never duplicated, never auto-cancels — auto-release is Omega’s policy decision) | `operations › maintenance job` | Fixed (policy open) |
+| A5-02 | High | Configuration | Demo mode plus live PayFast credentials would let “payments” succeed without money; a weak `APP_SECRET` was only detected on first use | No boot-time validation | `instrumentation.ts` refuses to start on fatal misconfiguration (weak secret, non-https live URL, demo + live merchant); Administration lists pre-launch warnings | `tests/unit/config-check.test.ts` | Fixed |
+| A5-03 | Medium | Test harness | Full Playwright run: 8 tests timed out on “Too many attempts” | The production login limiter (20 per IP per 15 min) correctly throttled the suite’s own logins | Harness clears `login:*` rows before each test (demo DB only); no bypass in application code. The limiter itself stays covered | Full run 29/29 | Fixed |
+| A5-04 | Low | Data growth | `rate_limits` rows never deleted | No housekeeping | Hourly job purges windows older than 24 h | Code review | Fixed |
+| A5-05 | Low | Handover | `.env.example` was missing `CRON_SECRET`, `CLAMAV_*`, `WEBSITE_URL`, `REQUIRE_STAFF_MFA` | Added after the file was written | Added, with comments | Review | Fixed |
+| A5-06 | Low | Documentation | Docs referred to an older test count and 45 tables; self-audit scores were stale | Docs predated this phase | Required document set written and refreshed; stale files replaced | Review | Fixed |
+| A5-07 | Medium | Uploads | Carried from A2-12: no malware scanner here | External service | Boot warning, “not scanned” labels; approval of infected files impossible | — | **Open — configure ClamAV** |
+| A5-08 | Medium | Headers | CSP permits `'unsafe-inline'` scripts | Next inline bootstrap without nonces | Documented; nonce-based CSP recommended | — | **Open** |
+| A5-09 | Medium | Integrations | Email, PayFast, Supabase Storage and deployment have never run against real services | No accounts or credentials (none invented) | Status shown truthfully in Administration; activation steps in INTEGRATIONS.md | — | **Open — needs Omega’s accounts** |
+
+### Readiness verdict
+**Not yet production-ready, and not claimed to be.** The application code is a tested release candidate. Go-live is blocked only by items that need Omega’s accounts or external parties:
+
+1. Configure ClamAV.
+2. Configure Resend with a verified domain.
+3. Complete one PayFast sandbox payment end to end, then switch to live.
+4. Set up Supabase Storage.
+5. Deploy with managed Postgres, `CRON_SECRET` and the scheduler.
+6. Run an external penetration test.
+7. Get a legal review of the privacy notice and retention periods.
+8. Do a screen-reader pass.
+9. Have Omega confirm rates and policies.

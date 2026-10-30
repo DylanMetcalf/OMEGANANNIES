@@ -1,9 +1,10 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { ActionForm, Submit } from "@/components/action-form";
-import { Badge, PageHeader, Section } from "@/components/ui";
+import { Badge, Notice, PageHeader, Section } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { env } from "@/lib/env";
+import { configProblems } from "@/lib/config-check";
 import { can, PERMISSIONS } from "@/lib/permissions";
 import { paymentProvider } from "@/lib/payments/service";
 import { fmtDateTime } from "@/lib/time";
@@ -30,9 +31,11 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
     ["AI assistant", env.anthropicKey ? `Configured (${env.anthropicModel})` : "Not configured — FAQ search only", !!env.anthropicKey],
     ["Document storage", env.storageDriver === "supabase" ? "Supabase private bucket" : "Local private disk (dev/demo only)", env.storageDriver === "supabase"],
   ] as const;
+  const { warnings } = configProblems();
   return (
     <>
       <PageHeader eyebrow="Administration" title="System & access" />
+      {warnings.length > 0 && <div className="mb-6"><Notice tone="warn" title="Before going live"><ul className="list-disc pl-4">{warnings.map((w) => <li key={w}>{w}</li>)}</ul></Notice></div>}
       <div className="grid gap-6 xl:grid-cols-2">
         <Section title="Integrations — actual status">
           <ul className="divide-y divide-line">{integ.map(([k, v, ok]) => { const row = integrations.find((i) => k.toLowerCase().includes(i.key)); return <li key={k} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-[14px]"><span className="font-medium text-navy">{k}</span><span className="flex items-center gap-2 text-[13px]"><span className="text-muted">{v}</span><Badge tone={ok ? "ok" : "warn"}>{ok ? "ready" : "blocked"}</Badge>{row?.lastSuccessAt && <span className="text-[12px] text-muted">last ok {fmtDateTime(row.lastSuccessAt)}</span>}</span></li>; })}</ul>

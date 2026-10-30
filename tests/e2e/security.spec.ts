@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import pg from "pg";
+import { resetLoginLimits } from "./limits";
 
 /** Audit 2 — HTTP-level negative tests against the running demo (synthetic data only). */
 const PW = "OmegaDemo2026!";
@@ -8,6 +9,7 @@ async function q<T = Record<string, string>>(sql: string): Promise<T[]> {
   const c = new pg.Client({ connectionString: DB }); await c.connect();
   try { return (await c.query(sql)).rows as T[]; } finally { await c.end(); }
 }
+test.beforeEach(resetLoginLimits);
 async function login(page: Page, email: string) {
   await page.goto("/login");
   await page.waitForFunction(() => document.documentElement.dataset.hydrated === "1");
