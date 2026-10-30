@@ -36,6 +36,20 @@
       "when": 1793350000000,
       "tag": "0004_journey_calendar_growth",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793360000000,
+      "tag": "0005_calendar_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793370000000,
+      "tag": "0006_notification_attempts",
+      "breakpoints": true
     }
   ]
 }

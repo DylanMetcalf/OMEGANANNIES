@@ -1,20 +1,30 @@
 import { desc, eq } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 import { ActionForm, Submit } from "@/components/action-form";
-import { PageHeader, Section } from "@/components/ui";
+import { Badge, Notice, PageHeader, Section, type Tone } from "@/components/ui";
+import { CATEGORIES, CATEGORY_LABEL, type ChannelPrefs } from "@/lib/channels";
+import { provider, PROVIDERS } from "@/lib/calendar/providers";
+import { providerStatus } from "@/lib/notify";
 import { requireUser } from "@/lib/auth";
 import { isManagement } from "@/lib/permissions";
 import { fmtDateTime } from "@/lib/time";
 import * as A from "./actions";
 
 export const metadata = { title: "Account" };
-export default async function Account() {
+export default async function Account({ searchParams }: { searchParams: Promise<{ calendar?: string }> }) {
   const u = await requireUser();
-  const [[row], [prefs], sessions] = await Promise.all([
+  const cal = (await searchParams).calendar;
+  const [[row], [prefs], sessions, conns] = await Promise.all([
     db.select().from(s.users).where(eq(s.users.id, u.id)),
     db.select().from(s.notificationPreferences).where(eq(s.notificationPreferences.userId, u.id)),
     db.select().from(s.sessions).where(eq(s.sessions.userId, u.id)).orderBy(desc(s.sessions.lastSeenAt)),
+    db.select({ id: s.calendarConnections.id, provider: s.calendarConnections.provider, accountEmail: s.calendarConnections.accountEmail, status: s.calendarConnections.status, pushBookings: s.calendarConnections.pushBookings, importBusy: s.calendarConnections.importBusy, lastSyncAt: s.calendarConnections.lastSyncAt, lastError: s.calendarConnections.lastError }).from(s.calendarConnections).where(eq(s.calendarConnections.userId, u.id)),
   ]);
+  const isNanny = u.roles.includes("nanny");
+  const ps = providerStatus();
+  const chPrefs = (prefs?.channels ?? {}) as ChannelPrefs;
+  const legacy = { bookings: prefs?.emailBookings ?? true, payments: prefs?.emailBookings ?? true, messages: prefs?.emailMessages ?? true, reminders: prefs?.emailReminders ?? true };
+  const calMsg = { connected: ["ok", "Calendar connected. Confirmed bookings will appear in it."], denied: ["warn", "Calendar access wasn't granted."], failed: ["bad", "We couldn't connect your calendar. Please try again."], unavailable: ["warn", "Calendar connection isn't switched on by Omega yet."], busy: ["warn", "Too many attempts — try again later."] }[cal ?? ""] as [Tone, string] | undefined;
   const chk = (n: string, l: string, on: boolean) => <label className="flex items-center gap-2.5 text-[14px]"><input type="checkbox" name={n} defaultChecked={on} className="h-4 w-4 accent-navy" />{l}</label>;
   return (
     <>
@@ -42,14 +52,61 @@ export default async function Account() {
           </ActionForm>
           {isManagement(u) && <p className="mt-3 text-[13px] text-muted">Two-step verification: {row.mfaEnabled ? "on" : "off — set it up under Administration"}.</p>}
         </Section>
-        <Section title="Notifications" description="Account and security emails are always sent.">
-          <ActionForm action={A.savePreferencesAction} className="space-y-3">
-            {chk("emailBookings", "Bookings, quotes and payments", prefs?.emailBookings ?? true)}
-            {chk("emailMessages", "New messages", prefs?.emailMessages ?? true)}
-            {chk("emailReminders", "Reminders (introductions, documents)", prefs?.emailReminders ?? true)}
-            {chk("marketingOptIn", "Occasional news and offers (optional)", prefs?.marketingOptIn ?? false)}
+        <Section title="Notifications" description="Security and account notices always reach you by email and in the portal." className="lg:col-span-2">
+          <ActionForm action={A.savePreferencesAction} className="space-y-4">
+            <div tabIndex={0} role="region" aria-label="Notification channels" className="overflow-x-auto">
+              <table className="tbl min-w-[520px]">
+                <thead><tr><th>Type</th><th className="text-center">Email</th><th className="text-center">SMS</th><th className="text-center">WhatsApp</th></tr></thead>
+                <tbody>
+                  <tr><td>Account &amp; security</td><td className="text-center text-[13px] text-muted">Always</td><td className="text-center text-muted">—</td><td className="text-center text-muted">—</td></tr>
+                  {CATEGORIES.map((c) => <tr key={c}><td>{CATEGORY_LABEL[c]}</td>{(["email", "sms", "whatsapp"] as const).map((ch) => <td key={ch} className="text-center"><input type="checkbox" name={`${c}_${ch}`} defaultChecked={chPrefs[c]?.[ch] ?? (ch === "email" ? legacy[c] : false)} aria-label={`${CATEGORY_LABEL[c]} by ${ch}`} className="h-4 w-4 accent-navy" /></td>)}</tr>)}
+                </tbody>
+              </table>
+            </div>
+            {!row.phone && <p className="text-[13px] text-muted">Add a mobile number under Your details to use SMS or WhatsApp.</p>}
+            <div className="grid gap-2 text-[13px] sm:grid-cols-2">
+              {!prefs?.smsConsentAt && <label className="flex gap-2"><input type="checkbox" name="smsConsent" className="mt-0.5 h-4 w-4 accent-navy" />I agree to receive service SMS from Omega Nannies at my mobile number. Reply STOP to opt out.</label>}
+              {!prefs?.whatsappConsentAt && <label className="flex gap-2"><input type="checkbox" name="whatsappConsent" className="mt-0.5 h-4 w-4 accent-navy" />I agree to receive service WhatsApp messages from Omega Nannies.</label>}
+            </div>
+            {chk("marketingOptIn", "Occasional news and offers by email (optional, never required)", prefs?.marketingOptIn ?? false)}
+            {(!ps.sms || !ps.whatsapp) && <p className="text-[12px] text-muted">{!ps.sms && !ps.whatsapp ? "SMS and WhatsApp" : !ps.sms ? "SMS" : "WhatsApp"} delivery is not switched on by Omega yet — your choice is saved for when it is.</p>}
             <Submit className="btn-secondary">Save preferences</Submit>
           </ActionForm>
+        </Section>
+        <Section title="Calendar" description={isNanny ? "Confirmed bookings appear in your calendar. Busy times in your calendar can protect your availability — only start and end times are read, never titles or details." : "Add your confirmed bookings to your own calendar automatically."} className="lg:col-span-2">
+          <div id="calendar" />
+          {calMsg && <div className="mb-4"><Notice tone={calMsg[0]}>{calMsg[1]}</Notice></div>}
+          <ul className="space-y-3">
+            {PROVIDERS.map((p) => {
+              const c = conns.find((x) => x.provider === p);
+              const prov = provider(p);
+              return (
+                <li key={p} className="rounded-[12px] border border-line p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div><p className="font-semibold text-ink">{prov.label}</p><p className="text-[13px] text-muted">{c ? `${c.accountEmail ?? "Connected"}${c.lastSyncAt ? ` · last synced ${fmtDateTime(c.lastSyncAt)}` : ""}` : prov.configured() ? "Not connected" : "Not available yet — Omega hasn't switched this on"}</p></div>
+                    <div className="flex items-center gap-2">
+                      {c && <Badge tone={c.status === "active" ? "ok" : "warn"}>{c.status === "active" ? "Connected" : c.status === "needs_reauth" ? "Reconnect needed" : c.status}</Badge>}
+                      {(!c || c.status !== "active") && prov.configured() && <a href={`/api/calendar/connect/${p}`} className="btn-secondary btn-sm">{c ? "Reconnect" : "Connect"}</a>}
+                    </div>
+                  </div>
+                  {c?.lastError && <p className="mt-2 text-[13px] text-warn">{c.lastError}</p>}
+                  {c && (
+                    <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-line pt-3">
+                      <ActionForm action={A.calendarPrefsAction} className="flex flex-wrap items-center gap-4 text-[14px]">
+                        <input type="hidden" name="id" value={c.id} />
+                        <label className="flex items-center gap-2"><input type="checkbox" name="pushBookings" defaultChecked={c.pushBookings} className="h-4 w-4 accent-navy" />Add my bookings</label>
+                        {isNanny && <label className="flex items-center gap-2"><input type="checkbox" name="importBusy" defaultChecked={c.importBusy} className="h-4 w-4 accent-navy" />Use my busy times for availability</label>}
+                        <Submit className="btn-ghost btn-sm">Save</Submit>
+                      </ActionForm>
+                      <ActionForm action={A.syncCalendarNowAction}><input type="hidden" name="id" value={c.id} /><Submit className="btn-ghost btn-sm" pendingText="Syncing…">Sync now</Submit></ActionForm>
+                      <ActionForm action={A.disconnectCalendarAction} confirm="Disconnect this calendar? Omega's events will be removed from it."><input type="hidden" name="id" value={c.id} /><Submit className="btn-ghost btn-sm text-bad" pendingText="Disconnecting…">Disconnect</Submit></ActionForm>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-3 text-[12px] text-muted">Changes you make to an Omega booking inside your calendar don&rsquo;t change the booking — Omega is notified and will follow up. To change a booking, message us.</p>
         </Section>
         <Section title="Where you’re signed in">
           <ul className="mb-4 space-y-2 text-[13px]">{sessions.map((x) => <li key={x.id} className="flex justify-between gap-3"><span className="truncate text-muted">{x.userAgent?.replace(/\(.*?\)/g, "").slice(0, 60) ?? "Unknown device"}</span><span className="shrink-0">{x.id === u.sessionId ? <b>This device</b> : fmtDateTime(x.lastSeenAt)}</span></li>)}</ul>

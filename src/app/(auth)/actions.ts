@@ -3,6 +3,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { pathFitsRoles, safeNext } from "@/lib/site";
+import { attributeReferral } from "@/lib/growth";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { audit } from "@/lib/audit";
@@ -75,7 +76,12 @@ export async function registerFamilyAction(_: ActionResult, fd: FormData): Promi
         await tx.insert(s.familyMembers).values({ familyId: f.id, userId: u.id, relationship: "Parent", isPrimary: true });
         await tx.insert(s.consents).values([{ userId: u.id, policy: "privacy", version: "2026-10", granted: true }, { userId: u.id, policy: "marketing", version: "2026-10", granted: bool(fd, "marketing") }]);
         await tx.insert(s.notificationPreferences).values({ userId: u.id, marketingOptIn: bool(fd, "marketing") });
-        return u.id;
+        return { userId: u.id, familyId: f.id };
+      }).then(async (x) => {
+        // Referral attribution from a /r/CODE link (recorded only; rewards depend on the programme being active).
+        const ref = (await cookies()).get("omega_ref")?.value;
+        if (ref) { await attributeReferral(ref, x.userId, x.familyId).catch(() => null); (await cookies()).delete("omega_ref"); }
+        return x.userId;
       });
       const token = await issueToken("verify_email", 24, { userId });
       link = `/verify-email?token=${token}`;

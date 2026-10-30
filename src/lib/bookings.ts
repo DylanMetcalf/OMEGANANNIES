@@ -6,6 +6,7 @@ import { BLOCKING, canTransition, type Actor, type BookingStatus } from "./booki
 import { randomToken } from "./crypto";
 import { formatMoney } from "./money";
 import { notify, notifyMany } from "./notify";
+import { afterBookingChange } from "./booking-hooks";
 import { can, isManagement, type Permission } from "./permissions";
 import { calculateQuote, type PriceItem } from "./pricing";
 import { rank, type Candidate, type MatchRequirements } from "./matching";
@@ -172,7 +173,7 @@ export async function transition(u: CurrentUser, bookingId: string, to: BookingS
   const acc = await bookingAccess(u, b0);
   if (acc.level === "none") throw new DomainError("Booking not found");
   if (acc.level === "management") needPerm(u, "bookings.manage");
-  return db.transaction(async (tx) => {
+  const done = await db.transaction(async (tx) => {
     const b = await transitionTx(tx, bookingId, to, u, note);
     const fam = await familyUserIds(b.familyId, tx);
     const nannyU = await nannyUserId(b.nannyId, tx);
@@ -184,6 +185,8 @@ export async function transition(u: CurrentUser, bookingId: string, to: BookingS
     }
     return b;
   });
+  afterBookingChange(done.id, to);
+  return done;
 }
 
 // ---------------- Matching & assignment ----------------
@@ -200,6 +203,7 @@ export async function loadCandidates(b: Booking): Promise<Candidate[]> {
     .where(and(eq(s.bookingSessions.blocking, true), inArray(s.bookingSessions.nannyId, ids), ne(s.bookingSessions.bookingId, b.id), lt(s.bookingSessions.startsAt, maxEnd), gt(s.bookingSessions.endsAt, minStart)));
   const exc = await db.select().from(s.availabilityExceptions).where(and(inArray(s.availabilityExceptions.nannyId, ids), lt(s.availabilityExceptions.startsAt, maxEnd), gt(s.availabilityExceptions.endsAt, minStart)));
   const rules = await db.select().from(s.availabilityRules).where(inArray(s.availabilityRules.nannyId, ids));
+  const calBusy = await db.select().from(s.calendarBusyBlocks).where(and(inArray(s.calendarBusyBlocks.nannyId, ids), lt(s.calendarBusyBlocks.startsAt, maxEnd), gt(s.calendarBusyBlocks.endsAt, minStart)));
   const prev = b.familyId ? await db.select({ nannyId: s.bookings.nannyId, c: sql<number>`count(*)::int` }).from(s.bookings)
     .where(and(eq(s.bookings.familyId, b.familyId), eq(s.bookings.status, "completed"))).groupBy(s.bookings.nannyId) : [];
   const overlaps = (a: { startsAt: Date; endsAt: Date }) => sess.some((x) => x.startsAt < a.endsAt && x.endsAt > a.startsAt);
@@ -213,6 +217,7 @@ export async function loadCandidates(b: Booking): Promise<Candidate[]> {
       conflicts: [
         ...busy.filter((x) => x.nannyId === n.id && overlaps(x)).map((x) => ({ startsAt: x.startsAt, endsAt: x.endsAt, reason: `booked on ${x.ref}` })),
         ...exc.filter((x) => x.nannyId === n.id && x.kind !== "available" && overlaps(x)).map((x) => ({ startsAt: x.startsAt, endsAt: x.endsAt, reason: `${x.kind}${x.reason ? ` (${x.reason})` : ""}` })),
+        ...calBusy.filter((x) => x.nannyId === n.id && overlaps(x)).map((x) => ({ startsAt: x.startsAt, endsAt: x.endsAt, reason: "busy in their own calendar" })),
       ],
       outsideAvailability: outside,
       previousBookingsWithFamily: prev.find((p) => p.nannyId === n.id)?.c ?? 0,
@@ -394,7 +399,7 @@ export async function reschedule(u: CurrentUser, bookingId: string, i: { startDa
   needPerm(u, "bookings.manage");
   if (!i.reason.trim()) throw new DomainError("Give a reason for rescheduling.");
   if (i.endDate < i.startDate) throw new DomainError("End date must be on or after the start date.");
-  return db.transaction(async (tx) => {
+  const nb = await db.transaction(async (tx) => {
     const b = await lockBooking(tx, bookingId);
     if (["completed", "cancelled", "declined", "refunded", "in_progress"].includes(b.status)) throw new DomainError("This booking can't be rescheduled.");
     const blocking = BLOCKING.includes(b.status);
@@ -417,6 +422,8 @@ export async function reschedule(u: CurrentUser, bookingId: string, i: { startDa
     await notifyMany([...(await familyUserIds(b.familyId, tx)), ...(nannyU ? [nannyU] : [])], "booking_rescheduled", { ref: b.reference, dates: dateRange(nb) }, `booking:${b.id}:resched:${nb.lockVersion}:${i.startDate}`, undefined, tx);
     return nb;
   });
+  afterBookingChange(nb.id, "rescheduled");
+  return nb;
 }
 
 export async function addNote(u: CurrentUser, bookingId: string, note: string, internal: boolean) {

@@ -8,6 +8,7 @@ import { notifyMany } from "../notify";
 import { can } from "../permissions";
 import { DomainError, onBookingConfirmed, transitionTx } from "../bookings";
 import { checkoutFields, payfastHost } from "./payfast";
+import { afterBookingChange } from "../booking-hooks";
 import type { CurrentUser } from "../auth";
 
 export type ProviderStatus = "succeeded" | "failed" | "cancelled" | "pending";
@@ -54,6 +55,14 @@ export async function payfastCheckout(u: CurrentUser, paymentId: string) {
  * out-of-order delivery (terminal states never regress) and amount tampering (must equal the attempt).
  */
 export async function applyPaymentEvent(e: VerifiedEvent): Promise<string> {
+  const outcome = await applyPaymentEventTx(e);
+  if (outcome === "applied") {
+    const [r] = await db.select({ bookingId: s.invoices.bookingId }).from(s.payments).innerJoin(s.invoices, eq(s.invoices.id, s.payments.invoiceId)).where(eq(s.payments.id, e.paymentId));
+    if (r) afterBookingChange(r.bookingId, "payment");
+  }
+  return outcome;
+}
+async function applyPaymentEventTx(e: VerifiedEvent): Promise<string> {
   return db.transaction(async (tx) => {
     const ins = await tx.insert(s.paymentEvents).values({ provider: e.provider, eventId: e.eventId, paymentId: null, signatureValid: true, payload: e.payload as object, outcome: "processing" }).onConflictDoNothing().returning();
     if (!ins.length) return "duplicate";

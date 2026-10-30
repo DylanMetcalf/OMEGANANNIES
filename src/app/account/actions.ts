@@ -13,6 +13,8 @@ import { bool, email, opt, password, run, str } from "@/lib/forms";
 import { deliverPending, notify, sendEmailDirect } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
 import { issueToken } from "@/lib/tokens";
+import { CATEGORIES, normalizePhone } from "@/lib/channels";
+import { disconnect, syncIncoming } from "@/lib/calendar/sync";
 import type { ActionResult } from "@/components/action-form";
 
 /** Re-authentication for sensitive changes: the current password must be supplied. */
@@ -28,7 +30,12 @@ export async function saveProfileAction(_: ActionResult, fd: FormData): Promise<
   return run(async () => {
     const u = await assertUser();
     const v = z.object({ name: z.string().trim().min(2, "Enter your name.").max(120), phone: z.string().trim().max(40).regex(/^[+\d\s()-]*$/, "Use digits, spaces and + only.") }).parse({ name: str(fd, "name"), phone: str(fd, "phone") });
-    await db.update(s.users).set({ name: v.name, phone: v.phone || null, updatedAt: new Date() }).where(eq(s.users.id, u.id));
+    const phone = v.phone ? normalizePhone(v.phone) : null;
+    if (v.phone && !phone) throw new DomainError("Enter a valid mobile number, e.g. 082 123 4567 or +27 82 123 4567.");
+    const [cur] = await db.select({ phone: s.users.phone }).from(s.users).where(eq(s.users.id, u.id));
+    await db.update(s.users).set({ name: v.name, phone, updatedAt: new Date() }).where(eq(s.users.id, u.id));
+    // Consent to SMS/WhatsApp belongs to a specific number: a new number needs fresh consent.
+    if (normalizePhone(cur?.phone) !== phone) await db.update(s.notificationPreferences).set({ smsConsentAt: null, whatsappConsentAt: null }).where(eq(s.notificationPreferences.userId, u.id));
     await audit(u.id, "account.profile_update", "user", u.id);
     revalidatePath("/", "layout");
     return { ok: "Saved." };
@@ -87,13 +94,59 @@ export async function confirmEmailChangeAction(_: ActionResult, fd: FormData): P
   return r;
 }
 
+/** Channel matrix. Security notices aren't in it (always on); SMS/WhatsApp need a number and explicit consent. */
 export async function savePreferencesAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
   return run(async () => {
     const u = await assertUser();
-    const v = { emailBookings: bool(fd, "emailBookings"), emailMessages: bool(fd, "emailMessages"), emailReminders: bool(fd, "emailReminders"), marketingOptIn: bool(fd, "marketingOptIn") };
+    const [[me], [cur]] = await Promise.all([db.select({ phone: s.users.phone }).from(s.users).where(eq(s.users.id, u.id)), db.select().from(s.notificationPreferences).where(eq(s.notificationPreferences.userId, u.id))]);
+    const channels = Object.fromEntries(CATEGORIES.map((c) => [c, { email: bool(fd, `${c}_email`), sms: bool(fd, `${c}_sms`), whatsapp: bool(fd, `${c}_whatsapp`) }]));
+    const wantsSms = CATEGORIES.some((c) => channels[c].sms), wantsWa = CATEGORIES.some((c) => channels[c].whatsapp);
+    if ((wantsSms || wantsWa) && !normalizePhone(me?.phone)) throw new DomainError("Add a mobile number under Your details before choosing SMS or WhatsApp.");
+    if (wantsSms && !cur?.smsConsentAt && !bool(fd, "smsConsent")) throw new DomainError("Please confirm you agree to receive SMS messages.");
+    if (wantsWa && !cur?.whatsappConsentAt && !bool(fd, "whatsappConsent")) throw new DomainError("Please confirm you agree to receive WhatsApp messages.");
+    const v = {
+      channels, marketingOptIn: bool(fd, "marketingOptIn"),
+      emailBookings: channels.bookings.email, emailMessages: channels.messages.email, emailReminders: channels.reminders.email,
+      smsConsentAt: wantsSms ? (cur?.smsConsentAt ?? new Date()) : null, whatsappConsentAt: wantsWa ? (cur?.whatsappConsentAt ?? new Date()) : null,
+    };
     await db.insert(s.notificationPreferences).values({ userId: u.id, ...v }).onConflictDoUpdate({ target: s.notificationPreferences.userId, set: v });
-    await db.insert(s.consents).values({ userId: u.id, policy: "marketing", version: "2026-10", granted: v.marketingOptIn });
+    await db.insert(s.consents).values([
+      { userId: u.id, policy: "marketing", version: "2026-10", granted: v.marketingOptIn },
+      ...(wantsSms !== !!cur?.smsConsentAt ? [{ userId: u.id, policy: "sms", version: "2026-10", granted: wantsSms }] : []),
+      ...(wantsWa !== !!cur?.whatsappConsentAt ? [{ userId: u.id, policy: "whatsapp", version: "2026-10", granted: wantsWa }] : []),
+    ]);
+    revalidatePath("/account");
     return { ok: "Preferences saved." };
+  });
+}
+
+export async function disconnectCalendarAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const u = await assertUser();
+    if (!(await disconnect(u.id, str(fd, "id")))) throw new DomainError("Connection not found.");
+    revalidatePath("/account");
+    return { ok: "Calendar disconnected. Omega's events were removed from it." };
+  });
+}
+export async function calendarPrefsAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const u = await assertUser();
+    const r = await db.update(s.calendarConnections).set({ pushBookings: bool(fd, "pushBookings"), importBusy: bool(fd, "importBusy"), updatedAt: new Date() }).where(and(eq(s.calendarConnections.id, str(fd, "id")), eq(s.calendarConnections.userId, u.id))).returning();
+    if (!r.length) throw new DomainError("Connection not found.");
+    if (!r[0].importBusy) await db.delete(s.calendarBusyBlocks).where(eq(s.calendarBusyBlocks.connectionId, r[0].id));
+    revalidatePath("/account");
+    return { ok: "Calendar preferences saved." };
+  });
+}
+export async function syncCalendarNowAction(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const u = await assertUser();
+    const [c] = await db.select().from(s.calendarConnections).where(and(eq(s.calendarConnections.id, str(fd, "id")), eq(s.calendarConnections.userId, u.id)));
+    if (!c) throw new DomainError("Connection not found.");
+    if (!(await rateLimit(`calendar:sync:${u.id}`, 6, 600))) throw new DomainError("Please wait a few minutes before syncing again.");
+    const r = await syncIncoming(c.id).catch((e) => { throw new DomainError(`Sync failed: ${(e as Error).message}`); });
+    revalidatePath("/account");
+    return { ok: `Synced. ${r.busy} busy period${r.busy === 1 ? "" : "s"} protecting your availability.` };
   });
 }
 

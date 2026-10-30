@@ -552,12 +552,12 @@ export const notifications = pgTable("notifications", {
   id: id(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   dedupeKey: text("dedupe_key").notNull(),
-  channel: text("channel").notNull(), // in_app | email
+  channel: text("channel").notNull(), // in_app | email | sms | whatsapp
   template: text("template").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
   link: text("link"),
-  status: text("status").notNull().default("pending"), // pending | sent | failed | captured (demo) | skipped
+  status: text("status").notNull().default("pending"), // pending | sent (accepted by provider) | delivered (provider confirmed) | failed | captured (demo/no provider) | skipped
   attempts: smallint("attempts").notNull().default(0),
   lastError: text("last_error"),
   readAt: ts("read_at"),
@@ -565,6 +565,7 @@ export const notifications = pgTable("notifications", {
   /** Provider message id; delivery is only "delivered" once the provider's signed callback says so. */
   providerRef: text("provider_ref"),
   deliveredAt: ts("delivered_at"),
+  lastAttemptAt: ts("last_attempt_at"),
   createdAt: created(),
 }, (t) => [index("notifications_provider_ref_idx").on(t.providerRef), uniqueIndex("notifications_dedupe_uq").on(t.userId, t.channel, t.dedupeKey), index("notifications_user_idx").on(t.userId, t.createdAt)]);
 
@@ -715,6 +716,8 @@ export const calendarEventLinks = pgTable("calendar_event_links", {
   id: id(),
   connectionId: uuid("connection_id").notNull().references(() => calendarConnections.id, { onDelete: "cascade" }),
   bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  /** One provider event per care session (a multi-day booking is several events, never one long block). */
+  sessionStart: ts("session_start"),
   providerEventId: text("provider_event_id"),
   etag: text("etag"),
   /** Hash of what Omega last wrote: an incoming change with a different hash is an external edit. */
@@ -722,7 +725,7 @@ export const calendarEventLinks = pgTable("calendar_event_links", {
   status: text("status").notNull().default("pending"), // pending | synced | deleted | conflict | error
   lastError: text("last_error"),
   updatedAt: updated(),
-}, (t) => [uniqueIndex("calendar_event_links_uq").on(t.connectionId, t.bookingId), index("calendar_event_links_event_idx").on(t.providerEventId)]);
+}, (t) => [uniqueIndex("calendar_event_links_uq").on(t.connectionId, t.bookingId, t.sessionStart), index("calendar_event_links_event_idx").on(t.providerEventId)]);
 /** External busy periods (no titles or details stored) used only to protect availability. */
 export const calendarBusyBlocks = pgTable("calendar_busy_blocks", {
   id: id(),

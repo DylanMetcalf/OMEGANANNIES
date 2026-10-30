@@ -22,6 +22,8 @@ import { importWebsiteNannies, parseCsv } from "@/lib/website-import";
 import { rateLimit } from "@/lib/rate-limit";
 import { storeImageUpload } from "@/lib/uploads";
 import { setSetting } from "@/lib/settings";
+import { resolveConflict } from "@/lib/calendar/sync";
+import { adjustLedger, decideReferral } from "@/lib/growth";
 import type { ActionResult } from "@/components/action-form";
 
 const done = (path: string, ok: string): ActionResult => { revalidatePath(path); void deliverPending(); return { ok }; };
@@ -492,5 +494,53 @@ export async function platformSettingsAction(_: ActionResult, fd: FormData) {
     await setSetting("requireNannyAcceptance", bool(fd, "requireNannyAcceptance"), u.id);
     await audit(u.id, "settings.platform", "settings", "platform", { addressReveal: str(fd, "addressReveal"), requireNannyAcceptance: bool(fd, "requireNannyAcceptance") });
     return done("/manage/admin", "Settings saved.");
+  });
+}
+
+export async function resolveCalendarConflictAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "bookings.manage" });
+    const action = str(fd, "action") === "restore" ? "restore" : "dismiss";
+    if (!(await resolveConflict(u.id, str(fd, "id"), action))) throw new DomainError("This conflict is already resolved.");
+    return done("/manage/admin", action === "restore" ? "Omega's booking event restored in the connected calendar." : "Conflict closed.");
+  });
+}
+
+export async function referralSettingsAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "settings.manage" });
+    const rewardValue = str(fd, "rewardType") === "points" ? Number.parseInt(str(fd, "rewardValue") || "0", 10) : parseMoney(str(fd, "rewardValue") || "0");
+    const v = { enabled: bool(fd, "enabled"), rewardType: str(fd, "rewardType"), rewardValue, qualification: str(fd, "qualification"), expiryDays: Number.parseInt(str(fd, "expiryDays") || "365", 10), maxRewardsPerReferrer: Number.parseInt(str(fd, "maxRewardsPerReferrer") || "10", 10), services: list(fd, "services"), requireApproval: bool(fd, "requireApproval") };
+    if (v.enabled && !v.rewardValue) throw new DomainError("Set a reward value before switching the programme on.");
+    await setSetting("referral", v, u.id);
+    await audit(u.id, "settings.referral", "settings", "referral", v);
+    return done("/manage/growth", v.enabled ? "Referral programme saved and active." : "Referral programme saved (inactive).");
+  });
+}
+export async function loyaltySettingsAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "settings.manage" });
+    const n = (k: string) => Number.parseInt(str(fd, k) || "0", 10);
+    const v = { enabled: bool(fd, "enabled"), pointsPerCompletedBooking: n("pointsPerCompletedBooking"), milestoneEvery: n("milestoneEvery"), milestonePoints: n("milestonePoints") };
+    await setSetting("loyalty", v, u.id);
+    await audit(u.id, "settings.loyalty", "settings", "loyalty", v);
+    return done("/manage/growth", v.enabled ? "Loyalty programme saved and active." : "Loyalty programme saved (inactive).");
+  });
+}
+export async function decideReferralAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "payments.manage" });
+    await decideReferral(u, str(fd, "id"), str(fd, "decision") === "approve");
+    return done("/manage/growth", str(fd, "decision") === "approve" ? "Reward approved and added to the ledger." : "Referral marked not eligible.");
+  });
+}
+export async function adjustLedgerAction(_: ActionResult, fd: FormData) {
+  return run(async () => {
+    const u = await assertUser({ perm: "payments.manage" });
+    const kind = str(fd, "kind") === "points" ? "points" : "credit_minor";
+    const raw = str(fd, "amount");
+    const delta = kind === "points" ? Number.parseInt(raw, 10) : (raw.trim().startsWith("-") ? -1 : 1) * parseMoney(raw.replace("-", ""));
+    await adjustLedger(u, str(fd, "familyId"), kind, delta, str(fd, "reason") === "redemption" ? "redemption" : "adjustment", str(fd, "note"));
+    return done("/manage/growth", "Ledger updated.");
   });
 }

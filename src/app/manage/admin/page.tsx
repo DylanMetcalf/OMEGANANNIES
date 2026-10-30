@@ -5,10 +5,12 @@ import { Badge, Notice, PageHeader, Section } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { configProblems } from "@/lib/config-check";
+import { providerStatus } from "@/lib/notify";
+import { provider as calProvider } from "@/lib/calendar/providers";
 import { can, PERMISSIONS } from "@/lib/permissions";
 import { paymentProvider } from "@/lib/payments/service";
 import { fmtDateTime } from "@/lib/time";
-import { confirmMfaAction, inviteStaffAction, platformSettingsAction, retentionAction, staffAccessAction, startMfaAction } from "../actions";
+import { confirmMfaAction, inviteStaffAction, platformSettingsAction, resolveCalendarConflictAction, retentionAction, staffAccessAction, startMfaAction } from "../actions";
 import { getSetting } from "@/lib/settings";
 
 export const metadata = { title: "Administration" };
@@ -23,15 +25,24 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
   const [emailStats] = (await db.execute<{ pending: number; failed: number; sent: number; captured: number }>(sql`SELECT count(*) FILTER (WHERE status='pending')::int pending, count(*) FILTER (WHERE status='failed')::int failed, count(*) FILTER (WHERE status='sent')::int sent, count(*) FILTER (WHERE status='captured')::int captured FROM notifications WHERE channel='email'`)).rows;
   const [me] = await db.select().from(s.users).where(eq(s.users.id, u.id));
   const [reveal, requireAccept] = await Promise.all([getSetting("addressReveal"), getSetting("requireNannyAcceptance")]);
+  const ps = providerStatus();
   const integ = [
     ["Payments (PayFast)", paymentProvider() === "payfast" ? (env.payfast.sandbox ? "Configured — sandbox" : "Configured — live") : env.demo ? "Demo provider (no real payments)" : "Not configured — needs merchant ID, key & passphrase", paymentProvider() === "payfast"],
     ["Email (Resend)", env.resendKey ? (env.demo ? "Key present — demo mode captures emails" : "Configured") : "Not configured — emails captured in outbox", !!env.resendKey && !env.demo],
     ["Website enquiries", env.websiteSecret ? "Signing secret configured" : "Not configured — set WEBSITE_WEBHOOK_SECRET", !!env.websiteSecret],
     ["Calendly", env.calendlySigningKey ? "Webhook signing key configured" : "Not configured (optional)", !!env.calendlySigningKey],
     ["AI assistant", env.anthropicKey ? `Configured (${env.anthropicModel})` : "Not configured — FAQ search only", !!env.anthropicKey],
+    ["SMS (Twilio)", ps.sms ? "Configured" : "Not configured — needs Twilio account and sender", ps.sms],
+    ["WhatsApp (Twilio)", ps.whatsapp ? "Configured — approved templates required for proactive messages" : "Not configured — needs a WhatsApp-enabled sender", ps.whatsapp],
+    ["Google Calendar sync", calProvider("google").configured() ? "OAuth client configured" : "Not configured — needs a Google OAuth client", calProvider("google").configured()],
+    ["Outlook / Microsoft 365 sync", calProvider("microsoft").configured() ? "OAuth client configured" : "Not configured — needs an Azure app registration", calProvider("microsoft").configured()],
     ["Document storage", env.storageDriver === "supabase" ? "Supabase private bucket" : "Local private disk (dev/demo only)", env.storageDriver === "supabase"],
   ] as const;
   const { warnings } = configProblems();
+  const [conflicts, delivery] = await Promise.all([
+    db.select({ c: s.calendarConflicts, ref: s.bookings.reference, bid: s.bookings.id, provider: s.calendarConnections.provider, who: s.users.name }).from(s.calendarConflicts).innerJoin(s.calendarConnections, eq(s.calendarConnections.id, s.calendarConflicts.connectionId)).innerJoin(s.users, eq(s.users.id, s.calendarConnections.userId)).leftJoin(s.bookings, eq(s.bookings.id, s.calendarConflicts.bookingId)).where(eq(s.calendarConflicts.status, "open")).orderBy(desc(s.calendarConflicts.createdAt)).limit(30),
+    db.execute<{ channel: string; status: string; n: number }>(sql`SELECT channel, status, count(*)::int AS n FROM notifications WHERE channel <> 'in_app' AND created_at > now() - interval '30 days' GROUP BY 1, 2 ORDER BY 1, 2`),
+  ]);
   return (
     <>
       <PageHeader eyebrow="Administration" title="System & access" />
@@ -39,7 +50,8 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
       <div className="grid gap-6 xl:grid-cols-2">
         <Section title="Integrations — actual status">
           <ul className="divide-y divide-line">{integ.map(([k, v, ok]) => { const row = integrations.find((i) => k.toLowerCase().includes(i.key)); return <li key={k} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-[14px]"><span className="font-medium text-navy">{k}</span><span className="flex items-center gap-2 text-[13px]"><span className="text-muted">{v}</span><Badge tone={ok ? "ok" : "warn"}>{ok ? "ready" : "blocked"}</Badge>{row?.lastSuccessAt && <span className="text-[12px] text-muted">last ok {fmtDateTime(row.lastSuccessAt)}</span>}</span></li>; })}</ul>
-          <p className="mt-3 text-[12px] text-muted">Email outbox: {emailStats.sent} sent · {emailStats.captured} captured · {emailStats.pending} pending · {emailStats.failed} failed (retried up to 5×). Secrets are managed in environment variables, never in the database.</p>
+          <p className="mt-3 text-[12px] text-muted">Last 30 days by channel: {delivery.rows.length ? delivery.rows.map((r) => `${r.channel} ${r.status} ${r.n}`).join(" · ") : "nothing sent"}. “sent” = accepted by the provider; “delivered” = confirmed by the provider’s signed callback.</p>
+          <p className="mt-1 text-[12px] text-muted">Email outbox: {emailStats.sent} sent · {emailStats.captured} captured · {emailStats.pending} pending · {emailStats.failed} failed (retried up to 5×). Secrets are managed in environment variables, never in the database.</p>
         </Section>
         <Section title="Your security">
           {me.mfaEnabled ? <p className="text-[14px]"><Badge tone="ok">Two-step verification on</Badge></p> : (
@@ -72,6 +84,18 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
               <label className="flex items-start gap-2.5 text-[14px]"><input type="checkbox" name="requireNannyAcceptance" defaultChecked={requireAccept} className="mt-0.5 h-4 w-4 accent-navy" /><span>Require the nanny to accept an offer before a quotation can be sent</span></label>
               <Submit className="btn-secondary">Save rules</Submit>
             </ActionForm>
+          </Section>
+        )}
+        {can(u, "bookings.manage") && (
+          <Section title="Calendar conflicts" description="Outside edits to Omega booking events never change a booking. Decide what happens here." className="xl:col-span-2">
+            {conflicts.length ? <ul className="divide-y divide-line">{conflicts.map(({ c, ref, bid, provider: p, who }) => (
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-[14px]">
+                <div><p className="font-medium text-ink">{ref ? <a className="link" href={`/manage/bookings/${bid}`}>{ref}</a> : "Booking"} · {who} ({p})</p><p className="text-[13px] text-muted">{c.detail} · {fmtDateTime(c.createdAt)}</p></div>
+                <div className="flex gap-2">
+                  {c.kind !== "busy_overlaps_booking" && <ActionForm action={resolveCalendarConflictAction}><input type="hidden" name="id" value={c.id} /><input type="hidden" name="action" value="restore" /><Submit className="btn-secondary btn-sm" pendingText="Restoring…">Restore Omega event</Submit></ActionForm>}
+                  <ActionForm action={resolveCalendarConflictAction}><input type="hidden" name="id" value={c.id} /><input type="hidden" name="action" value="dismiss" /><Submit className="btn-ghost btn-sm" pendingText="…">Mark handled</Submit></ActionForm>
+                </div>
+              </li>))}</ul> : <p className="text-[14px] text-muted">No open calendar conflicts.</p>}
           </Section>
         )}
         {can(u, "settings.manage") && (
